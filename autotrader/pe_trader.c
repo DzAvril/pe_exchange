@@ -15,7 +15,6 @@ char exchange_fifo[MAX_FIFO_NAME_LENGTH];
 char trader_fifo[MAX_FIFO_NAME_LENGTH];
 
 void teardown() {
-  printf("[debug] %s-%d Trader %d tear down resource.\n", __FILE__, __LINE__, trader_id);
   close(exchange_fd);
   close(trader_fd);
   unlink(exchange_fifo);
@@ -45,7 +44,7 @@ void serialize_order(Order* order, char* buf) {
 }
 
 void send_message_to_exchange(char *buf) {
-  printf("[debug] %s-%d Trader pid %d Send message %s to exchange.\n", __FILE__, __LINE__, getpid(), buf);
+    printf("[PEX-Milestone] Trader -> Exchange: %s\n", buf);
   size_t message_len = strlen(buf);
   if (write(trader_fd, buf, message_len) != message_len) {
     perror("Error writing message to trader");
@@ -113,7 +112,7 @@ void sig_handler(int signum) {
   if (signum == SIGUSR1) {
     char buf[MAX_MESSAGE_LENGTH];
     size_t len = read(exchange_fd, buf, sizeof(buf));
-    printf("Received message: %.*s\n", (int)len, buf);
+    // printf("Received message: %.*s\n", (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
         (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
       Response* response = (Response*)malloc(sizeof(Response));
@@ -128,12 +127,12 @@ void sig_handler(int signum) {
 }
 
 int main(int argc, char** argv) {
-  printf("Hello World from pe trader!\n");
+  // printf("Hello World from pe trader!\n");
   order_id = 0;
   if (argc > 1) {
     // get trader id from argv
     trader_id = atoi(argv[1]);
-    printf("[debug] %s-%d trader_id : %d.\n", __FILE__, __LINE__, trader_id);
+    // printf("[debug] %s-%d trader_id : %d.\n", __FILE__, __LINE__, trader_id);
   }
   // set signal handler
   signal(SIGUSR1, sig_handler);

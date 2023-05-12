@@ -22,7 +22,6 @@ void load_products(const char* filename) {
     exit(EXIT_FAILURE);
   }
   fscanf(file, "%d", &num_products);
-  printf("[debug] %s:%d num_products: %d.\n", __FILE__, __LINE__, num_products);
   for (int i = 0; i < num_products; i++) {
     fscanf(file, "%s", products[i].name);
   }
@@ -30,9 +29,9 @@ void load_products(const char* filename) {
 }
 
 void parse_args(int argc, char** argv) {
-  printf("[debug] %s-%d Parsing args...\n", __FILE__, __LINE__);
+  // printf("[debug] %s-%d Parsing args...\n", __FILE__, __LINE__);
   const char* filename = argv[1];
-  printf("[debug] %s-%d filename : %s.\n", __FILE__, __LINE__, filename);
+  // printf("[debug] %s-%d filename : %s.\n", __FILE__, __LINE__, filename);
   load_products(filename);
   num_traders = argc - 2;
 }
@@ -73,6 +72,7 @@ void fork_child_process() {
       char trader_id[10];
       sprintf(trader_id, "%d", i);
       char* trader_argv[] = {"./pe_trader", trader_id, NULL};
+      printf("[PEX-Milestone] Launching trader pe_trader\n");
       execv(trader_argv[0], trader_argv);
     } else if (pid > 0) {
       // parent process
@@ -86,7 +86,7 @@ void fork_child_process() {
 }
 
 void teardown() {
-  printf("[debug] %s-%d Tear down resources.\n", __FILE__, __LINE__);
+  printf("[PEX-Milestone] Trader disconnected\n");
   for (int i = 0; i < num_traders; i++) {
     close(traders[i].exchange_fd);
     close(traders[i].trader_fd);
@@ -99,16 +99,16 @@ void teardown() {
 
 void sig_handler(int sig, siginfo_t *info, void *context) {
   if (sig == SIGUSR1) {
-    char buf[MAX_MESSAGE_LENGTH];
-    int trader_id = -1;
-    for (int i = 0; i < num_traders; i++) {
-      if (traders[i].pid == info->si_pid) {
-        trader_id = i;
-        break;
-      }
-    }
-    ssize_t len = read(traders[trader_id].trader_fd, buf, sizeof(buf));
-    printf("[debug] %s:%d Received message: %.*s\n\n", __FILE__, __LINE__, (int)len, buf);
+    // char buf[MAX_MESSAGE_LENGTH];
+    // int trader_id = -1;
+    // for (int i = 0; i < num_traders; i++) {
+    //   if (traders[i].pid == info->si_pid) {
+    //     trader_id = i;
+    //     break;
+    //   }
+    // }
+    // ssize_t len = read(traders[trader_id].trader_fd, buf, sizeof(buf));
+    // printf("[debug] %s:%d Received message: %.*s\n\n", __FILE__, __LINE__, (int)len, buf);
   } else {
     teardown();
     raise(sig);
@@ -116,6 +116,7 @@ void sig_handler(int sig, siginfo_t *info, void *context) {
 }
 
 void connect_to_pipes() {
+  printf("[PEX-Milestone] Opened Name Pipes\n");
   for (int i = 0; i < num_traders; i++) {
     traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
     if (traders[i].exchange_fd == -1) {
@@ -131,6 +132,7 @@ void connect_to_pipes() {
 }
 
 void send_message(int trader_id, const char* message) {
+  printf("[PEX-Milestone] Exchange -> Trader: %s\n", message);
   size_t message_len = strlen(message);
   if (write(traders[trader_id].exchange_fd, message, message_len) != message_len) {
     perror("Error writing message to trader");
@@ -182,14 +184,13 @@ void nofify_market_sell() {
   }
   // randon create response
   srand(time(NULL));
-  printf("[debug] %s:%d num_products: %d.\n", __FILE__, __LINE__, num_products);
   int random_product = rand() % num_products;
   res->type = SELL;
   res->product = products[random_product];
   res->quantity = rand() % MAX_ORDER_QUANTITY + 1;
   res->price = rand() % 1000;
   serialize_response(res, buf);
-  printf("[debug] %s-%d Send response: %s.\n", __FILE__, __LINE__, buf);
+  // printf("[debug] %s-%d Send response: %s.\n", __FILE__, __LINE__, buf);
   for (int i = 0; i < num_traders; i++) {
     send_message(i, buf);
   }
@@ -198,7 +199,7 @@ void nofify_market_sell() {
 }
 
 int main(int argc, char** argv) {
-  printf("Hello World from pe exchange!\n");
+  // printf("Hello World from pe exchange!\n");
   if (argc > 1) {
     parse_args(argc, argv);
   }
