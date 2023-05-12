@@ -148,6 +148,7 @@ void send_message(int trader_id, const char* message) {
 
 void notify_market_open() {
   char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
   sprintf(buf, MESSAGE_MARKET_OPEN);
   for (int i = 0; i < num_traders; i++) {
     send_message(i, buf);
@@ -178,6 +179,7 @@ void serialize_response(Response* response, char* buf) {
 
 void nofify_market_sell() {
   char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
   Response* res = (Response*)malloc(sizeof(Response));
   if (res == NULL) {
     perror("Failed to allocate memory.\n");

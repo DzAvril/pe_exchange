@@ -65,6 +65,7 @@ void handle_exchange_reponse(Response* response) {
   order->quantity = response->quantity;
   order->price = response->price;
   char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
   serialize_order(order, buf);
   send_message_to_exchange(buf);
   free(order);
@@ -111,6 +112,7 @@ void deserialize_response(char* buf, Response* response) {
 void sig_handler(int signum) {
   if (signum == SIGUSR1) {
     char buf[MAX_MESSAGE_LENGTH];
+    memset(buf, '\0', sizeof(buf));
     // size_t len = read(exchange_fd, buf, sizeof(buf));
     // printf("Received message: %.*s\n", (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
