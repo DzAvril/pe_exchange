@@ -1,0 +1,7 @@
+{
+    "editor.formatOnSave": true,
+    "C_Cpp.clang_format_path": "/usr/bin/clang-format",
+    "C_Cpp.clang_format_style": "file:/Data0/Users/xuzhi.xu/temp/pe_exchange/.clang-format",
+    "C_Cpp.clang_format_fallbackStyle": "file:/Data0/Users/xuzhi.xu/temp/pe_exchange/.clang-format",
+    "C_Cpp.formatting": "clangFormat"
+}

@@ -1,0 +1,5 @@
+4
+GPU
+Motherboard
+switch
+monitor
