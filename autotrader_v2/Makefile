@@ -1,13 +1,10 @@
 CC=gcc
-CFLAGS=-Wall -g
+CFLAGS=-Wall -Werror -Wvla -O0 -std=c11 -g -fsanitize=address,leak
+LDFLAGS=-lm
+BINARIES=pe_trader
 
-all: pe_trader
+all: ${BINARIES}
 
-pe_trader: pe_trader.o 
-	$(CC) $(CFLAGS) -o pe_trader pe_trader.o 
-
-pe_trader.o: pe_trader.c pe_trader.h pe_common.h
-	$(CC) $(CFLAGS) -c pe_trader.c
-
+.PHONE: clean
 clean:
-	rm -f *.o pe_trader
+	rm -rf ${BINARIES}
