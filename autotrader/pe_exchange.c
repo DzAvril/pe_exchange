@@ -3,11 +3,12 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 
 #include "pe_common.h"
-
 // Global variables
 Product products[MAX_PRODUCTS];
 int num_products = 0;
@@ -21,6 +22,7 @@ void load_products(const char* filename) {
     exit(EXIT_FAILURE);
   }
   fscanf(file, "%d", &num_products);
+  printf("[debug] %s:%d num_products: %d.\n", __FILE__, __LINE__, num_products);
   for (int i = 0; i < num_products; i++) {
     fscanf(file, "%s", products[i].name);
   }
@@ -43,25 +45,25 @@ void fork_child_process() {
     if (access(traders[i].exchange_fifo, F_OK) != -1) {
       if (remove(traders[i].exchange_fifo) != 0) {
         perror("Error removing FIFO");
-        return 1;
+        exit(EXIT_FAILURE);
       }
     }
     if (access(traders[i].trader_fifo, F_OK) != -1) {
       if (remove(traders[i].trader_fifo) != 0) {
         perror("Error removing FIFO");
-        return 1;
+        exit(EXIT_FAILURE);
       }
     }
 
     // create fifo
     if (mkfifo(traders[i].exchange_fifo, 0666) < 0) {
       perror("Error creating FIFO");
-      return 1;
+      exit(EXIT_FAILURE);
     }
 
     if (mkfifo(traders[i].trader_fifo, 0666) < 0) {
       perror("Error creating FIFO");
-      return 1;
+      exit(EXIT_FAILURE);
     }
 
     // fork a child process to run pe_trader
@@ -83,16 +85,33 @@ void fork_child_process() {
   }
 }
 
-void sig_handler(int signum) {
-  if (signum == SIGUSR1) {
-    int fd = open("myfifo", O_RDONLY);
+void teardown() {
+  printf("[debug] %s-%d Tear down resources.\n", __FILE__, __LINE__);
+  for (int i = 0; i < num_traders; i++) {
+    close(traders[i].exchange_fd);
+    close(traders[i].trader_fd);
+    unlink(traders[i].exchange_fifo);
+    unlink(traders[i].trader_fifo);
+    remove(traders[i].trader_fifo);
+    remove(traders[i].exchange_fifo);
+  }
+}
 
-    char buf[1024];
-    ssize_t len = read(fd, buf, sizeof(buf));
-
-    printf("Received message: %.*s\n", (int)len, buf);
-
-    close(fd);
+void sig_handler(int sig, siginfo_t *info, void *context) {
+  if (sig == SIGUSR1) {
+    char buf[MAX_MESSAGE_LENGTH];
+    int trader_id = -1;
+    for (int i = 0; i < num_traders; i++) {
+      if (traders[i].pid == info->si_pid) {
+        trader_id = i;
+        break;
+      }
+    }
+    ssize_t len = read(traders[trader_id].trader_fd, buf, sizeof(buf));
+    printf("[debug] %s:%d Received message: %.*s\n\n", __FILE__, __LINE__, (int)len, buf);
+  } else {
+    teardown();
+    raise(sig);
   }
 }
 
@@ -111,27 +130,71 @@ void connect_to_pipes() {
   }
 }
 
-void notify_marker_open() {
-  for (int i = 0; i < num_traders; i++) {
-    char buf[1024];
-    sprintf(buf, MESSAGE_MARKET_OPEN);
-    traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
-    write(traders[i].exchange_fd, buf, sizeof(buf));
-    // send signal to trader
-    kill(traders[i].pid, SIGUSR1);
+void send_message(int trader_id, const char* message) {
+  size_t message_len = strlen(message);
+  if (write(traders[trader_id].exchange_fd, message, message_len) != message_len) {
+    perror("Error writing message to trader");
+    exit(EXIT_FAILURE);
+  }
+
+  // send signal to trader
+  if (kill(traders[trader_id].pid, SIGUSR1) == -1) {
+    perror("Error sending signal to trader");
+    exit(EXIT_FAILURE);
   }
 }
 
-void teardown() {
-  printf("[debug] %s-%d Tear down resources.\n", __FILE__, __LINE__);
+void notify_market_open() {
+  char buf[MAX_MESSAGE_LENGTH];
+  sprintf(buf, MESSAGE_MARKET_OPEN);
   for (int i = 0; i < num_traders; i++) {
-    close(traders[i].exchange_fd);
-    close(traders[i].trader_fd);
-    unlink(traders[i].exchange_fifo);
-    unlink(traders[i].trader_fifo);
-    remove(traders[i].trader_fifo);
-    remove(traders[i].exchange_fifo);
+    send_message(i, buf);
   }
+}
+
+void serialize_response(Response* response, char* buf) {
+  char type_string[MAX_TYPE_STRING_LENGTH];
+  switch (response->type) {
+    case BUY:
+      strncpy(type_string, ORDER_TYPE_BUY, MAX_TYPE_STRING_LENGTH);
+      break;
+    case SELL:
+      strncpy(type_string, ORDER_TYPE_SELL, MAX_TYPE_STRING_LENGTH);
+      break;
+    case AMEND:
+      strncpy(type_string, ORDER_TYPE_AMEND, MAX_TYPE_STRING_LENGTH);
+      break;
+    case CANCEL:
+      strncpy(type_string, ORDER_TYPE_CANCEL, MAX_TYPE_STRING_LENGTH);
+      break;
+    default:
+      break;
+  }
+  sprintf(buf, "%s %s %s %d %d;", RESPONSE_PREFIX, type_string, response->product.name,
+          response->quantity, response->price);
+}
+
+void nofify_market_sell() {
+  char buf[MAX_MESSAGE_LENGTH];
+  Response* res = (Response*)malloc(sizeof(Response));
+  if (res == NULL) {
+    perror("Failed to allocate memory.\n");
+  }
+  // randon create response
+  srand(time(NULL));
+  printf("[debug] %s:%d num_products: %d.\n", __FILE__, __LINE__, num_products);
+  int random_product = rand() % num_products;
+  res->type = SELL;
+  res->product = products[random_product];
+  res->quantity = rand() % MAX_ORDER_QUANTITY + 1;
+  res->price = rand() % 1000;
+  serialize_response(res, buf);
+  printf("[debug] %s-%d Send response: %s.\n", __FILE__, __LINE__, buf);
+  for (int i = 0; i < num_traders; i++) {
+    send_message(i, buf);
+  }
+  // release reponse
+  free(res);
 }
 
 int main(int argc, char** argv) {
@@ -140,7 +203,17 @@ int main(int argc, char** argv) {
     parse_args(argc, argv);
   }
   // set signal handler
-  signal(SIGUSR1, sig_handler);
+  // signal(SIGUSR1, sig_handler);
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(struct sigaction));
+  sa.sa_sigaction = sig_handler;
+  sa.sa_flags = SA_SIGINFO;
+  sigemptyset(&sa.sa_mask);
+
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+      perror("sigaction");
+      return 1;
+  }
 
   // fork child processes for traders
   fork_child_process();
@@ -148,8 +221,11 @@ int main(int argc, char** argv) {
   // check if all traders are connected
   connect_to_pipes();
 
-  // set MARKET OPEN to all traders
-  notify_marker_open();
+  // set MARKET OPEN to auto traders
+  notify_market_open();
+
+  // send MARKET SELL to auto traders
+  nofify_market_sell();
 
   // wait for all child processes to exit
   int status;
