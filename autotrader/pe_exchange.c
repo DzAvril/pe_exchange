@@ -69,7 +69,7 @@ void fork_child_process() {
     pid_t pid = fork();
     if (pid == 0) {
       // child process
-      char trader_id[10];
+      char trader_id[20];
       sprintf(trader_id, "%d", i);
       char* trader_argv[] = {"./pe_trader", trader_id, NULL};
       printf("[PEX-Milestone] Launching trader pe_trader\n");

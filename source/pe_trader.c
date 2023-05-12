@@ -1,16 +1,10 @@
 #include "pe_trader.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "pe_common.h"
-
 // global variables
 int trader_id;
 int exchange_fd;
 int trader_fd;
-int order_id;
+int order_id = 0;
 char exchange_fifo[MAX_FIFO_NAME_LENGTH];
 char trader_fifo[MAX_FIFO_NAME_LENGTH];
 
@@ -21,61 +15,10 @@ void teardown() {
   unlink(trader_fifo);
 }
 
-void serialize_order(Order* order, char* buf) {
-  char type_string[MAX_TYPE_STRING_LENGTH];
-  switch (order->type) {
-    case BUY:
-      strncpy(type_string, ORDER_TYPE_BUY, MAX_TYPE_STRING_LENGTH);
-      break;
-    case SELL:
-      strncpy(type_string, ORDER_TYPE_SELL, MAX_TYPE_STRING_LENGTH);
-      break;
-    case AMEND:
-      strncpy(type_string, ORDER_TYPE_AMEND, MAX_TYPE_STRING_LENGTH);
-      break;
-    case CANCEL:
-      strncpy(type_string, ORDER_TYPE_CANCEL, MAX_TYPE_STRING_LENGTH);
-      break;
-    default:
-      break;
-  }
-  sprintf(buf, "%s %d %s %d %d;", type_string, order->order_id, order->product.name,
-          order->quantity, order->price);
-}
-
-void send_message_to_exchange(char *buf) {
-    printf("[PEX-Milestone] Trader -> Exchange: %s\n", buf);
-  size_t message_len = strlen(buf);
-  if (write(trader_fd, buf, message_len) != message_len) {
-    perror("Error writing message to trader");
-    exit(EXIT_FAILURE);
-  }
-  // send signal to trader
-  if (kill(getppid(), SIGUSR1) == -1) {
-    perror("Error sending signal to trader");
-    exit(EXIT_FAILURE);
-  }
-}
-
-void handle_exchange_reponse(Response* response) {
-  Order* order = (Order*)malloc(sizeof(Order));
-  order->order_id = order_id++;
-  order->type = BUY;
-  strcpy(order->product.name, response->product.name);
-  order->quantity = response->quantity;
-  order->price = response->price;
-  char buf[MAX_MESSAGE_LENGTH];
-  memset(buf, '\0', sizeof(buf));
-  serialize_order(order, buf);
-  send_message_to_exchange(buf);
-  free(order);
-  teardown();
-}
-
 void deserialize_response(char* buf, Response* response) {
   const char token[2] = " ";
 
-  char *pos = strchr(buf, ';');
+  char* pos = strchr(buf, ';');
   if (pos != NULL) {
     memset(pos, '\0', strlen(pos));
   }
@@ -103,18 +46,65 @@ void deserialize_response(char* buf, Response* response) {
   strcpy(response->product.name, ptr[2]);
   response->quantity = atoi(ptr[3]);
   response->price = atoi(ptr[4]);
-  // printf("[debug] %s-%d response->type : %d.\n", __FILE__, __LINE__, response->type);
-  // printf("[debug] %s-%d response->product.name : %s.\n", __FILE__, __LINE__, response->product.name);
-  // printf("[debug] %s-%d response->num : %d.\n", __FILE__, __LINE__, response->num);
-  // printf("[debug] %s-%d response->price : %d.\n", __FILE__, __LINE__, response->price);
+}
+
+void serialize_order(Order* order, char* buf) {
+  char type_string[MAX_TYPE_STRING_LENGTH];
+  switch (order->type) {
+    case BUY:
+      strncpy(type_string, ORDER_TYPE_BUY, MAX_TYPE_STRING_LENGTH);
+      break;
+    case SELL:
+      strncpy(type_string, ORDER_TYPE_SELL, MAX_TYPE_STRING_LENGTH);
+      break;
+    case AMEND:
+      strncpy(type_string, ORDER_TYPE_AMEND, MAX_TYPE_STRING_LENGTH);
+      break;
+    case CANCEL:
+      strncpy(type_string, ORDER_TYPE_CANCEL, MAX_TYPE_STRING_LENGTH);
+      break;
+    default:
+      break;
+  }
+  sprintf(buf, "%s %d %s %d %d;", type_string, order->order_id, order->product.name,
+          order->quantity, order->price);
+}
+
+void send_message_to_exchange(char* buf) {
+  printf("[PEX-Milestone] Trader -> Exchange: %s\n", buf);
+  size_t message_len = strlen(buf);
+  if (write(trader_fd, buf, message_len) != message_len) {
+    perror("Error writing message to trader");
+    exit(EXIT_FAILURE);
+  }
+  // send signal to trader
+  if (kill(getppid(), SIGUSR1) == -1) {
+    perror("Error sending signal to trader");
+    exit(EXIT_FAILURE);
+  }
+}
+
+void handle_exchange_reponse(Response* response) {
+  Order* order = (Order*)malloc(sizeof(Order));
+  order->order_id = order_id++;
+  order->type = BUY;
+  strcpy(order->product.name, response->product.name);
+  order->quantity = response->quantity;
+  order->price = response->price;
+  char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
+  serialize_order(order, buf);
+  send_message_to_exchange(buf);
+  free(order);
+  teardown();
 }
 
 void sig_handler(int signum) {
   if (signum == SIGUSR1) {
     char buf[MAX_MESSAGE_LENGTH];
     memset(buf, '\0', sizeof(buf));
-    // size_t len = read(exchange_fd, buf, sizeof(buf));
-    // printf("Received message: %.*s\n", (int)len, buf);
+    size_t len = read(exchange_fd, buf, sizeof(buf));
+    printf("Received message: %.*s\n", (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
         (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
       Response* response = (Response*)malloc(sizeof(Response));
@@ -122,35 +112,38 @@ void sig_handler(int signum) {
       handle_exchange_reponse(response);
       free(response);
     }
-  } else {
-    teardown();
-    exit(0);
   }
 }
 
 int main(int argc, char** argv) {
-  // printf("Hello World from pe trader!\n");
-  order_id = 0;
-  if (argc > 1) {
-    // get trader id from argv
-    trader_id = atoi(argv[1]);
-    // printf("[debug] %s-%d trader_id : %d.\n", __FILE__, __LINE__, trader_id);
+    printf("[debug] %s:%d hello world from trader\n", __FILE__, __LINE__);
+  if (argc < 2) {
+    printf("Not enough arguments\n");
+    return 1;
   }
-  // set signal handler
+  if (argc > 1) {
+    trader_id = atoi(argv[1]);
+  }
+
+  // register signal handler
   signal(SIGUSR1, sig_handler);
-  signal(SIGINT, sig_handler);
+  // connect to named pipes
+
   // connect to exchange fifo
   char exchange_fifo[MAX_FIFO_NAME_LENGTH];
-  sprintf(exchange_fifo, FIFO_PATH_EXCHANGE_PREFIX, trader_id);
+  sprintf(exchange_fifo, FIFO_EXCHANGE, trader_id);
   exchange_fd = open(exchange_fifo, O_RDONLY);
 
   // connect to trader fifo
   char trader_fifo[MAX_FIFO_NAME_LENGTH];
-  sprintf(trader_fifo, FIFO_PATH_TRADER_PREFIX, trader_id);
+  sprintf(trader_fifo, FIFO_TRADER, trader_id);
   trader_fd = open(trader_fifo, O_WRONLY);
-
+  // event loop:
   while (1) {
     pause();
   }
-  return 0;
+    return 0;
+  // wait for exchange update (MARKET message)
+  // send order
+  // wait for exchange confirmation (ACCEPTED message)
 }
