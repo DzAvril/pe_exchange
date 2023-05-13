@@ -823,6 +823,15 @@ int main(int argc, char** argv) {
 
   // listen event of traders close fifo
   while (1) {
+    // block signal
+    sigset_t block_mask;
+    sigemptyset(&block_mask);
+    sigaddset(&block_mask, SIGINT);
+    sigaddset(&block_mask, SIGTERM);
+    if (sigprocmask(SIG_BLOCK, &block_mask, NULL) == -1) {
+      perror("sigprocmask failed");
+      exit(EXIT_FAILURE);
+    }
     int nfds;
     if ((nfds = epoll_wait(epollfd, ev, num_traders, -1)) != -1) {
       for (int i = 0; i < nfds; i++) {
@@ -838,6 +847,11 @@ int main(int argc, char** argv) {
           unlink(traders[trader_index].trader_fifo);
         }
       }
+    }
+    // unblock signal
+    if (sigprocmask(SIG_UNBLOCK, &block_mask, NULL) == -1) {
+      perror("sigprocmask failed");
+      exit(EXIT_FAILURE);
     }
     // wait for all child processes to exit
     int status;
