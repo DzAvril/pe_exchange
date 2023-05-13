@@ -711,6 +711,9 @@ void sig_handler(int sig, siginfo_t* info, void* context) {
     }
     read(traders[trader_index].trader_fd, buf, sizeof(buf));
     parsing_command(buf, traders[trader_index].trader_id);
+  } else if (sig == SIGCHLD) {
+    int trader_index = get_trader_by_pid(info->si_pid);
+    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
   } else {
     teardown();
     raise(sig);
@@ -760,6 +763,11 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    perror("sigaction");
+    return 1;
+  }
+
   // fork child processes for traders
   fork_child_process();
 
@@ -777,18 +785,10 @@ int main(int argc, char** argv) {
   pid_t wpid;
   while ((wpid = wait(&status)) > 0) {
     // if (WIFEXITED(status)) {
-    //   printf("Child process %d terminated with exit status %d\n", wpid,
-    //   WEXITSTATUS(status));
+    //   printf("Child process %d terminated with exit status %d\n", wpid, WEXITSTATUS(status));
     // } else if (WIFSIGNALED(status)) {
-    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid,
-    //   WTERMSIG(status));
+    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid, WTERMSIG(status));
     // }
-    int trader_index = get_trader_by_pid(wpid);
-    if (trader_index == -1) {
-      perror("Error getting trader by pid");
-      exit(EXIT_FAILURE);
-    }
-    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
   }
   printf("%s Trading completed\n", LOG_EXCHANGE_PREFIX);
   printf("%s Exchange fees collected: $%d\n", LOG_EXCHANGE_PREFIX, exchange_fee_collected);
