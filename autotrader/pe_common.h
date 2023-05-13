@@ -1,5 +1,6 @@
 #ifndef PE_COMMON_H
 #define PE_COMMON_H
+#define _POSIX_SOURCE
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>

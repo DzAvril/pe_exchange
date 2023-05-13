@@ -1,8 +1,7 @@
 CC=gcc
 CFLAGS=-Wall -Werror -Wvla -O0 -std=c11 -g -fsanitize=address,leak
-# CFLAGS=-Wall -Werror -Wvla -O0 -std=c11 -g 
 LDFLAGS=-lm
-BINARIES=pe_trader
+BINARIES=pe_exchange pe_trader
 
 all: $(BINARIES)
 

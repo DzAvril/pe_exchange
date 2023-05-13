@@ -113,8 +113,8 @@ void sig_handler(int signum) {
   if (signum == SIGUSR1) {
     char buf[MAX_MESSAGE_LENGTH];
     memset(buf, '\0', sizeof(buf));
-    // size_t len = read(exchange_fd, buf, sizeof(buf));
-    // printf("Received message: %.*s\n", (int)len, buf);
+    size_t len = read(exchange_fd, buf, sizeof(buf));
+    printf("Received message: %.*s\n", (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
         (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
       Response* response = (Response*)malloc(sizeof(Response));

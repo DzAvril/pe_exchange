@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -g -Wformat-overflow
+CFLAGS=-Wall -g
 
 all: pe_exchange pe_trader
 
