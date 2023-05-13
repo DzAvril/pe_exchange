@@ -106,7 +106,8 @@ void sig_handler(int signum) {
     char buf[MAX_MESSAGE_LENGTH];
     memset(buf, '\0', sizeof(buf));
     size_t len = read(exchange_fd, buf, sizeof(buf));
-    printf("[%s %d] [t=%d]Received from PEX: %.*s\n", LOG_TRADER_PREFIX, trader_id, timestamp, (int)len, buf);
+    printf("[%s %d] [t=%d]Received from PEX: %.*s\n", LOG_TRADER_PREFIX, trader_id, timestamp,
+           (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
         (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
       Response* response = (Response*)malloc(sizeof(Response));
@@ -149,7 +150,7 @@ int main(int argc, char** argv) {
   // while (1) {
   //   pause();
   // }
-  sleep(5);
+  sleep(2);
   teardown();
   return 0;
 }

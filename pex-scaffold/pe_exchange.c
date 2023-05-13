@@ -25,6 +25,7 @@ void load_products(const char* filename) {
   }
   fclose(file);
   char all_products[PRODUCT_NAME_LENGTH * MAX_PRODUCTS];
+  memset(all_products, '\0', sizeof(all_products));
   for (int i = 0; i < num_products; i++) {
     strcat(all_products, " ");
     strcat(all_products, products[i].name);
@@ -176,8 +177,8 @@ void print_report(Report* report) {
   printf("%s\tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
          report->product.name, report->buy_level, report->sell_level);
   for (int i = 0; i < report->num_product; i++) {
-    printf("%s\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
-           report->orderBrief[i].type == BUY ? "Buy" : "Sell", report->orderBrief[i].quantity,
+    printf("%s\t\t%s %d @ $%d (%d order)\n", LOG_EXCHANGE_PREFIX,
+           report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
            report->orderBrief[i].price, report->orderBrief[i].num_order);
   }
   return;
