@@ -126,7 +126,12 @@ int main(int argc, char** argv) {
   }
 
   // register signal handler
-  signal(SIGUSR1, sig_handler);
+  // signal(SIGUSR1, sig_handler);
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sa.sa_handler = sig_handler;
+    sigaction(SIGUSR1, &sa, NULL);
   // connect to named pipes
 
   // connect to exchange fifo
