@@ -91,6 +91,20 @@ void fork_child_process() {
       printf("%s Starting trader %d (%s)\n", LOG_EXCHANGE_PREFIX, i, trader_path[i]);
       char* trader_argv[] = {trader_path[i], trader_id, NULL};
       execv(trader_argv[0], trader_argv);
+
+      traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
+      if (traders[i].exchange_fd == -1) {
+        perror("Failed to open FIFO");
+        exit(EXIT_FAILURE);
+      }
+      printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].exchange_fifo);
+
+      traders[i].trader_fd = open(traders[i].trader_fifo, O_RDONLY);
+      if (traders[i].trader_fd == -1) {
+        perror("Failed to open FIFO");
+        exit(EXIT_FAILURE);
+      }
+      printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
     } else if (pid > 0) {
       // parent process
       traders[i].trader_id = i;
@@ -773,7 +787,7 @@ int main(int argc, char** argv) {
   fork_child_process();
 
   // check if all traders are connected
-  connect_to_pipes();
+  // connect_to_pipes();
 
   // set MARKET OPEN to auto traders
   notify_market_open();
@@ -785,11 +799,15 @@ int main(int argc, char** argv) {
   int status;
   pid_t wpid;
   while ((wpid = wait(&status)) > 0) {
-    // if (WIFEXITED(status)) {
-    //   printf("Child process %d terminated with exit status %d\n", wpid, WEXITSTATUS(status));
-    // } else if (WIFSIGNALED(status)) {
-    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid, WTERMSIG(status));
-    // }
+    if (WIFEXITED(status)) {
+      int trader_index = get_trader_by_pid(wpid);
+      printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
+      fflush(stdout);
+    } else if (WIFSIGNALED(status)) {
+      int trader_index = get_trader_by_pid(wpid);
+      printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
+      fflush(stdout);
+    }
   }
   printf("%s Trading completed\n", LOG_EXCHANGE_PREFIX);
   printf("%s Exchange fees collected: $%d\n", LOG_EXCHANGE_PREFIX, exchange_fee_collected);
