@@ -193,6 +193,10 @@ void print_orderbook() {
     report->num_product = 0;
     report->buy_level = 0;
     report->sell_level = 0;
+    // init report orderBrief num_order to 0
+    for (int j = 0; j < MAX_ORDERS; j++) {
+      report->orderBrief[j].num_order = 0;
+    }
     OrderInfo orderInfo[MAX_ORDERS];
     int num_orderInfo = 0;
     for (int j = 0; j < num_orders; j++) {
