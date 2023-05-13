@@ -813,7 +813,7 @@ int main(int argc, char** argv) {
   }
   struct epoll_event ev[MAX_TRADERS];
   for (int i = 0; i < num_traders; i++) {
-    ev[i].events = EPOLLHUP | EPOLLET;
+    ev[i].events = EPOLLIN | EPOLLHUP | EPOLLET;
     ev[i].data.fd = traders[i].trader_fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, traders[i].trader_fd, &ev[i]) == -1) {
       perror("epoll_ctl failed");
