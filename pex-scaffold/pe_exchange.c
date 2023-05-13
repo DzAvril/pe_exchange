@@ -714,6 +714,7 @@ void sig_handler(int sig, siginfo_t* info, void* context) {
   } else if (sig == SIGCHLD) {
     int trader_index = get_trader_by_pid(info->si_pid);
     printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
+    fflush(stdout);
   } else {
     teardown();
     raise(sig);
