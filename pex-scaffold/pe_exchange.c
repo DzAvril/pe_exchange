@@ -825,9 +825,8 @@ int main(int argc, char** argv) {
   while (1) {
     // block signal
     sigset_t block_mask;
-    sigemptyset(&block_mask);
-    sigaddset(&block_mask, SIGINT);
-    sigaddset(&block_mask, SIGTERM);
+    sigfillset(&block_mask);
+    sigdelset(&block_mask, SIGUSR1);
     if (sigprocmask(SIG_BLOCK, &block_mask, NULL) == -1) {
       perror("sigprocmask failed");
       exit(EXIT_FAILURE);
