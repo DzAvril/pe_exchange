@@ -1,15 +1,17 @@
 #include "pe_exchange.h"
 
+#include <math.h>
 #include <sys/wait.h>
 #include <time.h>
-
 // Global variables
 Product products[MAX_PRODUCTS];
 int num_products = 0;
 Trader traders[MAX_TRADERS];
 int num_traders = MAX_TRADERS;
-char *trader_path[MAX_TRADERS];
+char* trader_path[MAX_TRADERS];
 int exchange_fee_collected = 0;
+Order orderbook[MAX_ORDERS];
+int num_orders = 0;
 
 void load_products(const char* filename) {
   FILE* file = fopen(filename, "r");
@@ -72,6 +74,13 @@ void fork_child_process() {
     }
     printf("%s Created FIFO %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
 
+    // initialize trader positions
+    for (int j = 0; j < num_products; j++) {
+      traders[i].positions[j].product = products[j];
+      traders[i].positions[j].quantity = 0;
+      traders[i].positions[j].price = 0;
+    }
+
     // fork a child process to run pe_trader
     pid_t pid = fork();
     if (pid == 0) {
@@ -103,41 +112,6 @@ void teardown() {
   }
 }
 
-void sig_handler(int sig, siginfo_t *info, void *context) {
-  if (sig == SIGUSR1) {
-    char buf[MAX_MESSAGE_LENGTH];
-    int trader_id = -1;
-    for (int i = 0; i < num_traders; i++) {
-      if (traders[i].pid == info->si_pid) {
-        trader_id = i;
-        break;
-      }
-    }
-    ssize_t len = read(traders[trader_id].trader_fd, buf, sizeof(buf));
-    printf("[debug] %s:%d Received message: %.*s\n\n", __FILE__, __LINE__, (int)len, buf);
-  } else {
-    teardown();
-    raise(sig);
-  }
-}
-
-void connect_to_pipes() {
-  for (int i = 0; i < num_traders; i++) {
-    traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
-    if (traders[i].exchange_fd == -1) {
-      perror("Failed to open FIFO");
-      exit(EXIT_FAILURE);
-    }
-    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].exchange_fifo);
-    traders[i].trader_fd = open(traders[i].trader_fifo, O_RDONLY);
-    if (traders[i].trader_fd == -1) {
-      perror("Failed to open FIFO");
-      exit(EXIT_FAILURE);
-    }
-    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
-  }
-}
-
 void send_message(int trader_id, const char* message) {
   size_t message_len = strlen(message);
   if (write(traders[trader_id].exchange_fd, message, message_len) != message_len) {
@@ -152,13 +126,167 @@ void send_message(int trader_id, const char* message) {
   }
 }
 
-void notify_market_open() {
+void deserialize_order(Order* order, char* buf) {
+  const char token[2] = " ";
+
+  char* ptr[ORDER_LETTERS_NUM];
+  ptr[0] = strtok(buf, token);
+  int i = 0;
+  while (i < ORDER_LETTERS_NUM && ptr[i] != NULL) {
+    i++;
+    ptr[i] = strtok(NULL, token);
+  }
+  if (strncmp(ptr[0], ORDER_TYPE_BUY, strlen(ORDER_TYPE_BUY)) == 0) {
+    order->type = BUY;
+  } else if (strncmp(ptr[0], ORDER_TYPE_SELL, strlen(ORDER_TYPE_SELL)) == 0) {
+    order->type = SELL;
+  } else if (strncmp(ptr[0], ORDER_TYPE_AMEND, strlen(ORDER_TYPE_AMEND)) == 0) {
+    order->type = AMEND;
+  } else if (strncmp(ptr[0], ORDER_TYPE_CANCEL, strlen(ORDER_TYPE_CANCEL)) == 0) {
+    order->type = CANCEL;
+  } else {
+    printf("%s Unknown order type : %s\n", LOG_EXCHANGE_PREFIX, ptr[0]);
+    exit(0);
+  }
+  order->order_id = atoi(ptr[1]);
+  strcpy(order->product.name, ptr[2]);
+  order->quantity = atoi(ptr[3]);
+  order->price = atoi(ptr[4]);
+}
+
+int get_trader_by_id(int trader_id) {
+  for (int i = 0; i < num_traders; i++) {
+    if (traders[i].trader_id == trader_id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int get_trader_by_pid(int pid) {
+  for (int i = 0; i < num_traders; i++) {
+    if (traders[i].pid == pid) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void print_report(Report* report) {
+  printf("%s \tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
+         report->product.name, report->buy_level, report->sell_level);
+  for (int i = 0; i < report->num_product; i++) {
+    printf("%s \t\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
+           report->orderBrief[i].type == BUY ? "Buy" : "Sell", report->orderBrief[i].quantity,
+           report->orderBrief[i].price, report->orderBrief[i].num_order);
+  }
+  return;
+}
+
+void print_orderbook() {
+  printf("%s \t--ORDERBOOK--\n", LOG_EXCHANGE_PREFIX);
+  for (int i = 0; i < num_products; i++) {
+    Report* report = (Report*)malloc(sizeof(Report));
+    int current_buy_price = -1;
+    int current_sell_price = -1;
+    report->product = products[i];
+    report->num_product = 0;
+    report->buy_level = 0;
+    report->sell_level = 0;
+    OrderInfo orderInfo[MAX_ORDERS];
+    int num_orderInfo = 0;
+    for (int j = 0; j < num_orders; j++) {
+      if (strcmp(orderbook[j].product.name, products[i].name) == 0) {
+        orderInfo[num_orderInfo].index = j;
+        orderInfo[num_orderInfo].quantity = orderbook[j].quantity;
+        orderInfo[num_orderInfo].price = orderbook[j].price;
+        orderInfo[num_orderInfo].type = orderbook[j].type;
+        num_orderInfo++;
+      }
+    }
+    // sout orderInfo by price desc, if price is the same, sout buy order type
+    for (int i = 0; i < num_orderInfo - 1; i++) {
+      for (int j = 0; j < num_orderInfo - i - 1; j++) {
+        if (orderInfo[j].price < orderInfo[j + 1].price) {
+          OrderInfo temp = orderInfo[j];
+          orderInfo[j] = orderInfo[j + 1];
+          orderInfo[j + 1] = temp;
+        } else if (orderInfo[j].price == orderInfo[j + 1].price) {
+          if (orderInfo[j].type == BUY && orderInfo[j + 1].type == SELL) {
+            OrderInfo temp = orderInfo[j];
+            orderInfo[j] = orderInfo[j + 1];
+            orderInfo[j + 1] = temp;
+          }
+        }
+      }
+    }
+
+    for (int j = 0; j < num_orderInfo; j++) {
+      if (orderInfo[j].type == BUY) {
+        if (current_buy_price != orderInfo[j].price) {
+          report->buy_level++;
+          report->orderBrief[report->num_product].type = BUY;
+          report->orderBrief[report->num_product].price = orderInfo[j].price;
+          report->orderBrief[report->num_product].quantity = orderInfo[j].quantity;
+          report->orderBrief[report->num_product].num_order++;
+          report->num_product++;
+        } else {
+          if (orderInfo[j].type == orderInfo[j - 1].type) {
+            report->orderBrief[report->num_product - 1].quantity += orderInfo[j].quantity;
+            report->orderBrief[report->num_product - 1].num_order++;
+          }
+        }
+        current_buy_price = orderInfo[j].price;
+      } else if (orderInfo[j].type == SELL) {
+        if (current_sell_price != orderInfo[j].price) {
+          report->sell_level++;
+          report->orderBrief[report->num_product].type = SELL;
+          report->orderBrief[report->num_product].price = orderInfo[j].price;
+          report->orderBrief[report->num_product].quantity = orderInfo[j].quantity;
+          report->orderBrief[report->num_product].num_order++;
+          report->num_product++;
+        } else {
+          if (orderInfo[j].type == orderInfo[j - 1].type) {
+            report->orderBrief[report->num_product - 1].quantity += orderInfo[j].quantity;
+            report->orderBrief[report->num_product - 1].num_order++;
+          }
+        }
+        current_sell_price = orderInfo[j].price;
+      }
+    }
+    print_report(report);
+    free(report);
+  }
+}
+
+void print_position() {
+  // print postions of each trader
+  for (int i = 0; i < num_traders; i++) {
+    printf("%s \t--POSITIONS--\n", LOG_EXCHANGE_PREFIX);
+    char buf[MAX_LOG_LENGTH];
+    memset(buf, '\0', sizeof(buf));
+    sprintf(buf, "Trader %d:\n", i);
+    for (int j = 0; j < num_products; j++) {
+      char temp[MAX_LOG_LENGTH];
+      memset(temp, '\0', sizeof(temp));
+      if (j != num_products) {
+        sprintf(temp, "%s %d ($%d),", products[j].name, traders[i].positions[j].quantity,
+                traders[i].positions[j].price);
+      } else {
+        sprintf(temp, "%s %d ($%d)", products[j].name, traders[i].positions[j].quantity,
+                traders[i].positions[j].price);
+      }
+      strcat(buf, temp);
+    }
+    printf("%s \t%s\n", LOG_EXCHANGE_PREFIX, buf);
+  }
+}
+
+void accpeted(int trader_id, int order_id) {
   char buf[MAX_MESSAGE_LENGTH];
   memset(buf, '\0', sizeof(buf));
-  sprintf(buf, MESSAGE_MARKET_OPEN);
-  for (int i = 0; i < num_traders; i++) {
-    send_message(i, buf);
-  }
+  sprintf(buf, "%s %d;", MESSAGE_ACCEPTED, order_id);
+  send_message(trader_id, buf);
 }
 
 void serialize_response(Response* response, char* buf) {
@@ -183,28 +311,432 @@ void serialize_response(Response* response, char* buf) {
           response->quantity, response->price);
 }
 
-// void nofify_market_sell() {
-//   char buf[MAX_MESSAGE_LENGTH];
-//   memset(buf, '\0', sizeof(buf));
-//   Response* res = (Response*)malloc(sizeof(Response));
-//   if (res == NULL) {
-//     perror("Failed to allocate memory.\n");
-//   }
-//   // randon create response
-//   srand(time(NULL));
-//   int random_product = rand() % num_products;
-//   res->type = SELL;
-//   res->product = products[random_product];
-//   res->quantity = rand() % MAX_ORDER_QUANTITY + 1;
-//   res->price = rand() % 1000;
-//   serialize_response(res, buf);
-//   // printf("[debug] %s-%d Send response: %s.\n", __FILE__, __LINE__, buf);
-//   for (int i = 0; i < num_traders; i++) {
-//     send_message(i, buf);
-//   }
-//   // release reponse
-//   free(res);
-// }
+void market_message(int trader_id, Order* order) {
+  char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
+  Response* res = (Response*)malloc(sizeof(Response));
+  if (res == NULL) {
+    perror("Failed to allocate memory.\n");
+  }
+  res->type = order->type;
+  res->product = order->product;
+  res->quantity = order->quantity;
+  res->price = order->price;
+  serialize_response(res, buf);
+  for (int i = 0; i < num_traders; i++) {
+    if (trader_id != traders[i].trader_id) {
+      send_message(i, buf);
+    }
+  }
+  // release reponse
+  free(res);
+}
+
+void send_filled(int trader_id, int order_id, int quantity) {
+  char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
+  sprintf(buf, "%s %d %d;", MESSAGE_FILLED, order_id, quantity);
+  send_message(trader_id, buf);
+}
+
+void match_orders(Order* order) {
+  if (num_orders == 0) {
+    orderbook[num_orders] = *order;
+    num_orders++;
+    return;
+  } else {
+    // find the first order with the same product
+    int same_product_index = -1;
+    for (int i = 0; i < num_orders; i++) {
+      if (strcmp(order->product.name, orderbook[i].product.name) == 0) {
+        same_product_index = i;
+        break;
+      }
+    }
+    if (same_product_index == -1) {
+      orderbook[num_orders] = *order;
+      num_orders++;
+      return;
+    } else {
+      if (order->type == BUY) {
+        // find the all SELL orderes with the same product and price <= order->price
+        OrderInfo orderInfo[MAX_ORDERS];
+        int num_orderInfo = 0;
+        for (int i = 0; i < num_orders; i++) {
+          if (strcmp(order->product.name, orderbook[i].product.name) == 0 &&
+              orderbook[i].price <= order->price && orderbook[i].type == SELL) {
+            orderInfo[num_orderInfo].index = i;
+            orderInfo[num_orderInfo].quantity = orderbook[i].quantity;
+            orderInfo[num_orderInfo].price = orderbook[i].price;
+            orderInfo[num_orderInfo].to_be_removed = 0;
+            num_orderInfo++;
+          }
+        }
+        if (num_orderInfo == 0) {
+          orderbook[num_orders] = *order;
+          num_orders++;
+          return;
+        } else {
+          // sort orderInfo by price
+          for (int i = 0; i < num_orderInfo - 1; i++) {
+            for (int j = 0; j < num_orderInfo - i - 1; j++) {
+              if (orderInfo[j].price < orderInfo[j + 1].price) {
+                OrderInfo temp = orderInfo[j];
+                orderInfo[j] = orderInfo[j + 1];
+                orderInfo[j + 1] = temp;
+              }
+            }
+          }
+          // match orders
+          for (int i = 0; i < num_orderInfo; i++) {
+            int quantity_left = order->quantity - orderInfo[i].quantity;
+            if (quantity_left >= 0) {
+              // remove order from orderbook
+              orderInfo[i].to_be_removed = 1;
+              // update cash balance of seller
+              int seller_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
+              traders[seller_trader_index].cash_balance +=
+                  orderInfo[i].price * orderInfo[i].quantity;
+              // charge 1% transaction fee to the trader who placed the order last
+              int fee = (int)ceil(orderInfo[i].price * orderInfo[i].quantity * 0.01);
+              exchange_fee_collected += fee;
+
+              // update cache balance of buyer
+              int buyer_trader_index = get_trader_by_id(order->trader_id);
+              if (buyer_trader_index == -1) {
+                perror("Error getting trader by id");
+                exit(EXIT_FAILURE);
+              }
+              traders[buyer_trader_index].cash_balance -=
+                  orderInfo[i].price * orderInfo[i].quantity;
+              traders[buyer_trader_index].cash_balance -= fee;
+              // update seller trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[seller_trader_index].positions[j].product.name) == 0) {
+                  traders[seller_trader_index].positions[j].quantity -= orderInfo[i].quantity;
+                  traders[seller_trader_index].positions[j].price =
+                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              // update buyer trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[buyer_trader_index].positions[j].product.name) == 0) {
+                  traders[buyer_trader_index].positions[j].quantity += orderInfo[i].quantity;
+                  traders[buyer_trader_index].positions[j].price =
+                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              if (quantity_left == 0) {
+                send_filled(order->trader_id, order->order_id, order->quantity);
+                break;
+              }
+              order->quantity = quantity_left;
+            } else {
+              // update orderbook
+              orderInfo[i].to_be_removed = 0;
+              orderbook[orderInfo[i].index].quantity -= order->quantity;
+              // update cash balance of seller
+              int seller_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
+              traders[seller_trader_index].cash_balance += orderInfo[i].price * order->quantity;
+              // charge 1% transaction fee to the trader who placed the order last
+              int fee = (int)ceil(orderInfo[i].price * order->quantity * 0.01);
+              exchange_fee_collected += fee;
+              // update cash balance of buyer
+              int buyer_trader_index = get_trader_by_id(order->trader_id);
+              if (buyer_trader_index == -1) {
+                perror("Error getting trader by id");
+                exit(EXIT_FAILURE);
+              }
+              traders[buyer_trader_index].cash_balance -= orderInfo[i].price * order->quantity;
+              traders[buyer_trader_index].cash_balance -= fee;
+              // update seller trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[seller_trader_index].positions[j].product.name) == 0) {
+                  traders[seller_trader_index].positions[j].quantity -= order->quantity;
+                  traders[seller_trader_index].positions[j].price =
+                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              // update buyer trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[buyer_trader_index].positions[j].product.name) == 0) {
+                  traders[buyer_trader_index].positions[j].quantity += order->quantity;
+                  traders[buyer_trader_index].positions[j].price =
+                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              send_filled(order->trader_id, order->order_id, order->quantity);
+              break;
+            }
+          }
+          // sort orderInfo by index
+          for (int i = 0; i < num_orderInfo - 1; i++) {
+            for (int j = 0; j < num_orderInfo - i - 1; j++) {
+              if (orderInfo[j].index > orderInfo[j + 1].index) {
+                OrderInfo temp = orderInfo[j];
+                orderInfo[j] = orderInfo[j + 1];
+                orderInfo[j + 1] = temp;
+              }
+            }
+          }
+          // reomve order from orderbook by index desc
+          for (int i = num_orderInfo - 1; i >= 0; i--) {
+            if (orderInfo[i].to_be_removed) {
+              for (int j = orderInfo[i].index; j < num_orders - 1; j++) {
+                orderbook[j] = orderbook[j + 1];
+              }
+              num_orders--;
+            }
+          }
+          // check if order quantity is left
+          if (order->quantity > 0) {
+            orderbook[num_orders] = *order;
+            num_orders++;
+          }
+        }
+      } else if (order->type == SELL) {
+        // find the all BUY orderes with the same product and price >= order->price
+        OrderInfo orderInfo[MAX_ORDERS];
+        int num_orderInfo = 0;
+        for (int i = 0; i < num_orders; i++) {
+          if (strcmp(order->product.name, orderbook[i].product.name) == 0 &&
+              orderbook[i].price >= order->price && orderbook[i].type == BUY) {
+            orderInfo[num_orderInfo].index = i;
+            orderInfo[num_orderInfo].quantity = orderbook[i].quantity;
+            orderInfo[num_orderInfo].price = orderbook[i].price;
+            orderInfo[num_orderInfo].to_be_removed = 0;
+            num_orderInfo++;
+          }
+        }
+        if (num_orderInfo == 0) {
+          orderbook[num_orders] = *order;
+          num_orders++;
+          return;
+        } else {
+          // sort orderInfo by price
+          for (int i = 0; i < num_orderInfo - 1; i++) {
+            for (int j = 0; j < num_orderInfo - i - 1; j++) {
+              if (orderInfo[j].price > orderInfo[j + 1].price) {
+                OrderInfo temp = orderInfo[j];
+                orderInfo[j] = orderInfo[j + 1];
+                orderInfo[j + 1] = temp;
+              }
+            }
+          }
+          // match orders
+          for (int i = 0; i < num_orderInfo; i++) {
+            int quantity_left = order->quantity - orderInfo[i].quantity;
+            if (quantity_left >= 0) {
+              // remove order from orderbook
+              orderInfo[i].to_be_removed = 1;
+              // update cash balance of seller
+              int seller_trader_index = get_trader_by_id(order->trader_id);
+              traders[seller_trader_index].cash_balance +=
+                  orderInfo[i].price * orderInfo[i].quantity;
+              // charge 1% transaction fee to the trader who placed the order last
+              int fee = (int)ceil(orderInfo[i].price * orderInfo[i].quantity * 0.01);
+              exchange_fee_collected += fee;
+              // update cash balance of buyer
+              int buyer_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
+              if (buyer_trader_index == -1) {
+                perror("Error getting trader by id");
+                exit(EXIT_FAILURE);
+              }
+              traders[buyer_trader_index].cash_balance -=
+                  orderInfo[i].price * orderInfo[i].quantity;
+              traders[buyer_trader_index].cash_balance -= fee;
+              // update seller trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[seller_trader_index].positions[j].product.name) == 0) {
+                  traders[seller_trader_index].positions[j].quantity -= orderInfo[i].quantity;
+                  traders[seller_trader_index].positions[j].price =
+                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              // update buyer trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[buyer_trader_index].positions[j].product.name) == 0) {
+                  traders[buyer_trader_index].positions[j].quantity += orderInfo[i].quantity;
+                  traders[buyer_trader_index].positions[j].price =
+                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              if (quantity_left == 0) {
+                send_filled(order->trader_id, order->order_id, order->quantity);
+                break;
+              }
+              order->quantity = quantity_left;
+            } else {
+              // update orderbook
+              orderInfo[i].to_be_removed = 0;
+              orderbook[orderInfo[i].index].quantity -= order->quantity;
+              // charge 1% transaction fee to the trader who placed the order last
+              int fee = (int)ceil(orderInfo[i].price * order->quantity * 0.01);
+              // update cash balance of seller
+              int seller_trader_index = get_trader_by_id(order->trader_id);
+              traders[seller_trader_index].cash_balance += orderInfo[i].price * order->quantity;
+              traders[seller_trader_index].cash_balance -= fee;
+              exchange_fee_collected += fee;
+              // update cash balance of buyer
+              int buyer_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
+              if (buyer_trader_index == -1) {
+                perror("Error getting trader by id");
+                exit(EXIT_FAILURE);
+              }
+              traders[buyer_trader_index].cash_balance -= orderInfo[i].price * order->quantity;
+              // update seller trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[seller_trader_index].positions[j].product.name) == 0) {
+                  traders[seller_trader_index].positions[j].quantity -= order->quantity;
+                  traders[seller_trader_index].positions[j].price =
+                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              // update buyer trader positions
+              for (int j = 0; j < num_products; j++) {
+                if (strcmp(order->product.name,
+                           traders[buyer_trader_index].positions[j].product.name) == 0) {
+                  traders[buyer_trader_index].positions[j].quantity += order->quantity;
+                  traders[buyer_trader_index].positions[j].price =
+                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  break;
+                }
+              }
+              send_filled(order->trader_id, order->order_id, order->quantity);
+              break;
+            }
+          }
+          // sort orderInfo by index
+          for (int i = 0; i < num_orderInfo - 1; i++) {
+            for (int j = 0; j < num_orderInfo - i - 1; j++) {
+              if (orderInfo[j].index > orderInfo[j + 1].index) {
+                OrderInfo temp = orderInfo[j];
+                orderInfo[j] = orderInfo[j + 1];
+                orderInfo[j + 1] = temp;
+              }
+            }
+          }
+          // reomve order from orderbook by index desc
+          for (int i = num_orderInfo - 1; i >= 0; i--) {
+            if (orderInfo[i].to_be_removed) {
+              for (int j = orderInfo[i].index; j < num_orders - 1; j++) {
+                orderbook[j] = orderbook[j + 1];
+              }
+              num_orders--;
+            }
+          }
+          // check if order quantity is left
+          if (order->quantity > 0) {
+            orderbook[num_orders] = *order;
+            num_orders++;
+          }
+        }
+      }
+    }
+  }
+}
+void handle_order(char* buf, int trader_id) {
+  Order* order = (Order*)malloc(sizeof(Order));
+  deserialize_order(order, buf);
+  order->trader_id = trader_id;
+  int trader_index = get_trader_by_id(trader_id);
+  if (trader_index == -1) {
+    perror("Error getting trader by id");
+    exit(EXIT_FAILURE);
+  }
+  // send ACCEPTED to trader
+  accpeted(trader_id, order->order_id);
+  // send MARKET to other traders
+  market_message(trader_id, order);
+  // match orders
+  if (order->type == BUY || order->type == SELL) {
+    match_orders(order);
+  }
+  // release order
+  free(order);
+}
+
+void handle_amend(char* buf, int trader_id) {}
+
+void handle_cancel(char* buf, int trader_id) {}
+
+void parsing_command(char* buf, int trader_id) {
+  // strip ';' at the end
+  char* pos = strchr(buf, ';');
+  if (pos != NULL) {
+    memset(pos, '\0', strlen(pos));
+  }
+  printf("%s [T%d] Parsing command: <%s>\n", LOG_EXCHANGE_PREFIX, trader_id, buf);
+  // if buf start with 'BUY' or 'SELL', it is an order
+  if (strncmp(buf, ORDER_TYPE_BUY, strlen(ORDER_TYPE_BUY)) == 0 ||
+      strncmp(buf, ORDER_TYPE_SELL, strlen(ORDER_TYPE_SELL)) == 0) {
+    handle_order(buf, trader_id);
+  } else if (strncmp(buf, ORDER_TYPE_AMEND, strlen(ORDER_TYPE_AMEND)) == 0) {
+    handle_amend(buf, trader_id);
+  } else if (strncmp(buf, ORDER_TYPE_CANCEL, strlen(ORDER_TYPE_CANCEL)) == 0) {
+    handle_cancel(buf, trader_id);
+  } else {
+    printf("%s Unknown command: <%s>\n", LOG_EXCHANGE_PREFIX, buf);
+  }
+  print_orderbook();
+  print_position();
+}
+
+void sig_handler(int sig, siginfo_t* info, void* context) {
+  if (sig == SIGUSR1) {
+    char buf[MAX_MESSAGE_LENGTH];
+    int trader_index = get_trader_by_pid(info->si_pid);
+    if (trader_index == -1) {
+      perror("Error getting trader by pid");
+      exit(EXIT_FAILURE);
+    }
+    read(traders[trader_index].trader_fd, buf, sizeof(buf));
+    parsing_command(buf, traders[trader_index].trader_id);
+  } else {
+    teardown();
+    raise(sig);
+  }
+}
+
+void connect_to_pipes() {
+  for (int i = 0; i < num_traders; i++) {
+    traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
+    if (traders[i].exchange_fd == -1) {
+      perror("Failed to open FIFO");
+      exit(EXIT_FAILURE);
+    }
+    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].exchange_fifo);
+    traders[i].trader_fd = open(traders[i].trader_fifo, O_RDONLY);
+    if (traders[i].trader_fd == -1) {
+      perror("Failed to open FIFO");
+      exit(EXIT_FAILURE);
+    }
+    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
+  }
+}
+
+void notify_market_open() {
+  char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
+  sprintf(buf, MESSAGE_MARKET_OPEN);
+  for (int i = 0; i < num_traders; i++) {
+    send_message(i, buf);
+  }
+}
 
 int main(int argc, char** argv) {
   printf("%s Starting\n", LOG_EXCHANGE_PREFIX);
@@ -219,10 +751,9 @@ int main(int argc, char** argv) {
   sigemptyset(&sa.sa_mask);
 
   if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-      perror("sigaction");
-      return 1;
+    perror("sigaction");
+    return 1;
   }
-
 
   // fork child processes for traders
   fork_child_process();
@@ -241,18 +772,18 @@ int main(int argc, char** argv) {
   pid_t wpid;
   while ((wpid = wait(&status)) > 0) {
     // if (WIFEXITED(status)) {
-    //   printf("Child process %d terminated with exit status %d\n", wpid, WEXITSTATUS(status));
+    //   printf("Child process %d terminated with exit status %d\n", wpid,
+    //   WEXITSTATUS(status));
     // } else if (WIFSIGNALED(status)) {
-    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid, WTERMSIG(status));
+    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid,
+    //   WTERMSIG(status));
     // }
-    int trader_id = -1;
-    for (int i = 0; i < num_traders; i++) {
-      if (traders[i].pid == wpid) {
-        trader_id = traders[i].trader_id;
-        break;
-      }
+    int trader_index = get_trader_by_pid(wpid);
+    if (trader_index == -1) {
+      perror("Error getting trader by pid");
+      exit(EXIT_FAILURE);
     }
-    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, trader_id);
+    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
   }
   printf("%s Trading completed\n", LOG_EXCHANGE_PREFIX);
   printf("%s Exchange fees collected: $%d\n", LOG_EXCHANGE_PREFIX, exchange_fee_collected);

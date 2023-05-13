@@ -29,7 +29,6 @@ void deserialize_response(char* buf, Response* response) {
   char* ptr[RESPONSE_LETTERS_NUM];
   ptr[0] = strtok(buf, token);
   int i = 0;
-  fflush(stdout);
   while (i < RESPONSE_LETTERS_NUM && ptr[i] != NULL) {
     i++;
     ptr[i] = strtok(NULL, token);

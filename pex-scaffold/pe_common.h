@@ -3,14 +3,14 @@
 
 #define _POSIX_C_SOURCE 199309L
 
+#include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #define FIFO_EXCHANGE "/tmp/pe_exchange_%d"
 #define FIFO_TRADER "/tmp/pe_trader_%d"
@@ -28,6 +28,7 @@
 #define ORDER_ID_RANGE 1000000
 #define MAX_FIFO_NAME_LENGTH 32
 #define TRANSACTION_FEE 0.01
+#define MAX_LOG_LENGTH 512
 
 #define ORDER_TYPE_BUY "BUY"
 #define ORDER_TYPE_SELL "SELL"
@@ -35,8 +36,11 @@
 #define ORDER_TYPE_CANCEL "CANCEL"
 
 #define MESSAGE_MARKET_OPEN "MARKET OPEN;"
+#define MESSAGE_ACCEPTED "ACCEPTED"
+#define MESSAGE_FILLED "FILLED"
 #define RESPONSE_PREFIX "MARKET"
 #define RESPONSE_LETTERS_NUM 100
+#define ORDER_LETTERS_NUM 100
 
 typedef enum { BUY, SELL, AMEND, CANCEL } OrderType;
 
@@ -45,7 +49,14 @@ typedef struct {
 } Product;
 
 typedef struct {
+  Product product;
+  int quantity;
+  int price;
+} Position;
+
+typedef struct {
   int order_id;
+  int trader_id;
   Product product;
   int quantity;
   int price;
@@ -58,11 +69,11 @@ typedef struct {
   pid_t pid;
   int cash_balance;
   int products_balance[MAX_PRODUCTS];
-  Order orders[MAX_ORDERS];
   char exchange_fifo[MAX_FIFO_NAME_LENGTH];
   char trader_fifo[MAX_FIFO_NAME_LENGTH];
   int exchange_fd;
   int trader_fd;
+  Position positions[MAX_PRODUCTS];
 } Trader;
 
 typedef struct {
