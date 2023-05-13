@@ -8,6 +8,8 @@ Product products[MAX_PRODUCTS];
 int num_products = 0;
 Trader traders[MAX_TRADERS];
 int num_traders = MAX_TRADERS;
+char *trader_path[MAX_TRADERS];
+int exchange_fee_collected = 0;
 
 void load_products(const char* filename) {
   FILE* file = fopen(filename, "r");
@@ -20,6 +22,11 @@ void load_products(const char* filename) {
     fscanf(file, "%s", products[i].name);
   }
   fclose(file);
+  char all_products[PRODUCT_NAME_LENGTH * MAX_PRODUCTS];
+  for (int i = 0; i < num_products; i++) {
+    strcat(all_products, products[i].name);
+  }
+  printf("%s Trading %d products: %s\n", LOG_EXCHANGE_PREFIX, num_products, all_products);
 }
 
 void parse_args(int argc, char** argv) {
@@ -28,6 +35,9 @@ void parse_args(int argc, char** argv) {
   // printf("[debug] %s-%d filename : %s.\n", __FILE__, __LINE__, filename);
   load_products(filename);
   num_traders = argc - 2;
+  for (int i = 0; i < num_traders; i++) {
+    trader_path[i] = argv[i + 2];
+  }
 }
 
 void fork_child_process() {
@@ -53,11 +63,13 @@ void fork_child_process() {
       perror("Error creating FIFO");
       exit(EXIT_FAILURE);
     }
+    printf("%s Created FIFO %s\n", LOG_EXCHANGE_PREFIX, traders[i].exchange_fifo);
 
     if (mkfifo(traders[i].trader_fifo, 0666) < 0) {
       perror("Error creating FIFO");
       exit(EXIT_FAILURE);
     }
+    printf("%s Created FIFO %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
 
     // fork a child process to run pe_trader
     pid_t pid = fork();
@@ -65,8 +77,8 @@ void fork_child_process() {
       // child process
       char trader_id[20];
       sprintf(trader_id, "%d", i);
-      char* trader_argv[] = {"./pe_trader", trader_id, NULL};
-      printf("[PEX-Milestone] Launching trader pe_trader\n");
+      printf("%s Starting trader %d (%s)\n", LOG_EXCHANGE_PREFIX, i, trader_path[i]);
+      char* trader_argv[] = {trader_path[i], trader_id, NULL};
       execv(trader_argv[0], trader_argv);
     } else if (pid > 0) {
       // parent process
@@ -109,7 +121,6 @@ void sig_handler(int sig, siginfo_t *info, void *context) {
 }
 
 void connect_to_pipes() {
-  printf("[PEX-Milestone] Opened Name Pipes\n");
   for (int i = 0; i < num_traders; i++) {
     traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
     if (traders[i].exchange_fd == -1) {
@@ -125,7 +136,6 @@ void connect_to_pipes() {
 }
 
 void send_message(int trader_id, const char* message) {
-  printf("[PEX-Milestone] Exchange -> Trader: %s\n", message);
   size_t message_len = strlen(message);
   if (write(traders[trader_id].exchange_fd, message, message_len) != message_len) {
     perror("Error writing message to trader");
@@ -194,7 +204,7 @@ void serialize_response(Response* response, char* buf) {
 // }
 
 int main(int argc, char** argv) {
-  // printf("Hello World from pe exchange!\n");
+  printf("%s Starting\n", LOG_EXCHANGE_PREFIX);
   if (argc > 1) {
     parse_args(argc, argv);
   }
@@ -227,12 +237,22 @@ int main(int argc, char** argv) {
   int status;
   pid_t wpid;
   while ((wpid = wait(&status)) > 0) {
-    if (WIFEXITED(status)) {
-      printf("Child process %d terminated with exit status %d\n", wpid, WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-      printf("Child process %d terminated due to unhandled signal %d\n", wpid, WTERMSIG(status));
+    // if (WIFEXITED(status)) {
+    //   printf("Child process %d terminated with exit status %d\n", wpid, WEXITSTATUS(status));
+    // } else if (WIFSIGNALED(status)) {
+    //   printf("Child process %d terminated due to unhandled signal %d\n", wpid, WTERMSIG(status));
+    // }
+    int trader_id = -1;
+    for (int i = 0; i < num_traders; i++) {
+      if (traders[i].pid == wpid) {
+        trader_id = traders[i].trader_id;
+        break;
+      }
     }
+    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, trader_id);
   }
+  printf("%s Trading completed\n", LOG_EXCHANGE_PREFIX);
+  printf("%s Exchange fees collected: $%d\n", LOG_EXCHANGE_PREFIX, exchange_fee_collected);
   teardown();
   return 0;
 }

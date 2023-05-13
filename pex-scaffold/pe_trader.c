@@ -7,12 +7,15 @@ int trader_fd;
 int order_id = 0;
 char exchange_fifo[MAX_FIFO_NAME_LENGTH];
 char trader_fifo[MAX_FIFO_NAME_LENGTH];
+int timestamp = 0;
 
 void teardown() {
   close(exchange_fd);
   close(trader_fd);
   unlink(exchange_fifo);
   unlink(trader_fifo);
+  timestamp++;
+  printf("[%s %d] [t=%d] Event: DISCONNECT\n", LOG_TRADER_PREFIX, trader_id, timestamp);
 }
 
 void deserialize_response(char* buf, Response* response) {
@@ -104,7 +107,7 @@ void sig_handler(int signum) {
     char buf[MAX_MESSAGE_LENGTH];
     memset(buf, '\0', sizeof(buf));
     size_t len = read(exchange_fd, buf, sizeof(buf));
-    printf("Received message: %.*s\n", (int)len, buf);
+    printf("[%s %d] [t=%d]Received from PEX: %.*s\n", LOG_TRADER_PREFIX, trader_id, timestamp, (int)len, buf);
     if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
         (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
       Response* response = (Response*)malloc(sizeof(Response));
@@ -116,7 +119,6 @@ void sig_handler(int signum) {
 }
 
 int main(int argc, char** argv) {
-    printf("[debug] %s:%d hello world from trader\n", __FILE__, __LINE__);
   if (argc < 2) {
     printf("Not enough arguments\n");
     return 1;
@@ -127,11 +129,12 @@ int main(int argc, char** argv) {
 
   // register signal handler
   // signal(SIGUSR1, sig_handler);
-    struct sigaction sa;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    sa.sa_handler = sig_handler;
-    sigaction(SIGUSR1, &sa, NULL);
+  struct sigaction sa;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  sa.sa_handler = sig_handler;
+  sigaction(SIGUSR1, &sa, NULL);
+  // sigaction(SIGINT, &sa, NULL);
   // connect to named pipes
 
   // connect to exchange fifo
@@ -144,11 +147,10 @@ int main(int argc, char** argv) {
   sprintf(trader_fifo, FIFO_TRADER, trader_id);
   trader_fd = open(trader_fifo, O_WRONLY);
   // event loop:
-  while (1) {
-    pause();
-  }
-    return 0;
-  // wait for exchange update (MARKET message)
-  // send order
-  // wait for exchange confirmation (ACCEPTED message)
+  // while (1) {
+  //   pause();
+  // }
+  sleep(5);
+  teardown();
+  return 0;
 }
