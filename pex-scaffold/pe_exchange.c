@@ -823,21 +823,20 @@ int main(int argc, char** argv) {
 
   // listen event of traders close fifo
   while (1) {
-    int nfds = epoll_wait(epollfd, ev, num_traders, -1);
-    if (nfds == -1) {
-      perror("epoll_wait failed");
-      exit(EXIT_FAILURE);
-    }
-    for (int i = 0; i < nfds; i++) {
-      if (ev[i].events & EPOLLHUP) {
-        int trader_index = get_trader_by_fd(ev[i].data.fd);
-        if (trader_index == -1) {
-          perror("Error getting trader by fd");
-          exit(EXIT_FAILURE);
+    int nfds;
+    if ((nfds = epoll_wait(epollfd, ev, num_traders, -1)) != -1) {
+      for (int i = 0; i < nfds; i++) {
+        if (ev[i].events & EPOLLHUP) {
+          int trader_index = get_trader_by_fd(ev[i].data.fd);
+          if (trader_index == -1) {
+            perror("Error getting trader by fd");
+            exit(EXIT_FAILURE);
+          }
+          printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX,
+                 traders[trader_index].trader_id);
+          close(ev[i].data.fd);
+          unlink(traders[trader_index].trader_fifo);
         }
-        printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
-        close(ev[i].data.fd);
-        unlink(traders[trader_index].trader_fifo);
       }
     }
     // wait for all child processes to exit
