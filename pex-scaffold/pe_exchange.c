@@ -91,6 +91,10 @@ void fork_child_process() {
       printf("%s Starting trader %d (%s)\n", LOG_EXCHANGE_PREFIX, i, trader_path[i]);
       char* trader_argv[] = {trader_path[i], trader_id, NULL};
       execv(trader_argv[0], trader_argv);
+    } else if (pid > 0) {
+      // parent process
+      traders[i].trader_id = i;
+      traders[i].pid = pid;
 
       traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
       if (traders[i].exchange_fd == -1) {
@@ -105,10 +109,6 @@ void fork_child_process() {
         exit(EXIT_FAILURE);
       }
       printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
-    } else if (pid > 0) {
-      // parent process
-      traders[i].trader_id = i;
-      traders[i].pid = pid;
     } else {
       perror("Error forking child process");
       exit(EXIT_FAILURE);
