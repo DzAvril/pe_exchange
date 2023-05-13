@@ -734,14 +734,16 @@ void sig_handler(int sig, siginfo_t* info, void* context) {
     }
     read(traders[trader_index].trader_fd, buf, sizeof(buf));
     parsing_command(buf, traders[trader_index].trader_id);
-  } else if (sig == SIGCHLD) {
-    int trader_index = get_trader_by_pid(info->si_pid);
-    printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
-    fflush(stdout);
-  } else {
-    teardown();
-    raise(sig);
   }
+  // else if (sig == SIGCHLD) {
+  //   int trader_index = get_trader_by_pid(info->si_pid);
+  //   printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
+  //   fflush(stdout);
+  // }
+  // else {
+  //   teardown();
+  //   raise(sig);
+  // }
 }
 
 void connect_to_pipes() {
@@ -787,10 +789,10 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-    perror("sigaction");
-    return 1;
-  }
+  // if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+  //   perror("sigaction");
+  //   return 1;
+  // }
 
   // fork child processes for traders
   fork_child_process();
@@ -811,7 +813,7 @@ int main(int argc, char** argv) {
   }
   struct epoll_event ev[MAX_TRADERS];
   for (int i = 0; i < num_traders; i++) {
-    ev[i].events = EPOLLIN | EPOLLRDHUP | EPOLLET;
+    ev[i].events = EPOLLHUP | EPOLLET;
     ev[i].data.fd = traders[i].trader_fd;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, traders[i].trader_fd, &ev[i]) == -1) {
       perror("epoll_ctl failed");
@@ -827,7 +829,7 @@ int main(int argc, char** argv) {
       exit(EXIT_FAILURE);
     }
     for (int i = 0; i < nfds; i++) {
-      if (ev[i].events & EPOLLRDHUP) {
+      if (ev[i].events & EPOLLHUP) {
         int trader_index = get_trader_by_fd(ev[i].data.fd);
         if (trader_index == -1) {
           perror("Error getting trader by fd");
