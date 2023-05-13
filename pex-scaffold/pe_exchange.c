@@ -24,10 +24,10 @@ void load_products(const char* filename) {
   fclose(file);
   char all_products[PRODUCT_NAME_LENGTH * MAX_PRODUCTS];
   for (int i = 0; i < num_products; i++) {
-    strcat(all_products, products[i].name);
     strcat(all_products, " ");
+    strcat(all_products, products[i].name);
   }
-  printf("%s Trading %d products: %s\n", LOG_EXCHANGE_PREFIX, num_products, all_products);
+  printf("%s Trading %d products:%s\n", LOG_EXCHANGE_PREFIX, num_products, all_products);
 }
 
 void parse_args(int argc, char** argv) {
@@ -128,11 +128,13 @@ void connect_to_pipes() {
       perror("Failed to open FIFO");
       exit(EXIT_FAILURE);
     }
+    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].exchange_fifo);
     traders[i].trader_fd = open(traders[i].trader_fifo, O_RDONLY);
     if (traders[i].trader_fd == -1) {
       perror("Failed to open FIFO");
       exit(EXIT_FAILURE);
     }
+    printf("%s Connected to %s\n", LOG_EXCHANGE_PREFIX, traders[i].trader_fifo);
   }
 }
 
