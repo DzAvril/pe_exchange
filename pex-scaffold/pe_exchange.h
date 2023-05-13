@@ -3,6 +3,5 @@
 
 #include "pe_common.h"
 
-#define LOG_PREFIX "[PEX]"
 
 #endif
