@@ -147,10 +147,10 @@ int main(int argc, char** argv) {
   sprintf(trader_fifo, FIFO_TRADER, trader_id);
   trader_fd = open(trader_fifo, O_WRONLY);
   // event loop:
-  // while (1) {
-  //   pause();
-  // }
-  sleep(2);
+  while (1) {
+    pause();
+  }
+  // sleep(2);
   teardown();
   return 0;
 }

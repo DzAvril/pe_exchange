@@ -187,6 +187,15 @@ int get_trader_by_pid(int pid) {
   return -1;
 }
 
+int get_trader_by_fd(int fd) {
+  for (int i = 0; i < num_traders; i++) {
+    if (traders[i].trader_fd == fd) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 void print_report(Report* report) {
   printf("%s\tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
          report->product.name, report->buy_level, report->sell_level);
@@ -795,18 +804,51 @@ int main(int argc, char** argv) {
   // send MARKET SELL to auto traders
   // nofify_market_sell();
 
-  // wait for all child processes to exit
-  int status;
-  pid_t wpid;
-  while ((wpid = wait(&status)) > 0) {
-    if (WIFEXITED(status)) {
-      int trader_index = get_trader_by_pid(wpid);
-      printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
-      fflush(stdout);
-    } else if (WIFSIGNALED(status)) {
-      int trader_index = get_trader_by_pid(wpid);
-      printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
-      fflush(stdout);
+  int epollfd = epoll_create1(0);
+  if (epollfd == -1) {
+    perror("epoll_create failed");
+    exit(EXIT_FAILURE);
+  }
+  struct epoll_event ev[MAX_TRADERS];
+  for (int i = 0; i < num_traders; i++) {
+    ev[i].events = EPOLLIN | EPOLLRDHUP | EPOLLET;
+    ev[i].data.fd = traders[i].trader_fd;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, traders[i].trader_fd, &ev[i]) == -1) {
+      perror("epoll_ctl failed");
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  // listen event of traders close fifo
+  while (1) {
+    int nfds = epoll_wait(epollfd, ev, num_traders, -1);
+    if (nfds == -1) {
+      perror("epoll_wait failed");
+      exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < nfds; i++) {
+      if (ev[i].events & EPOLLRDHUP) {
+        int trader_index = get_trader_by_fd(ev[i].data.fd);
+        if (trader_index == -1) {
+          perror("Error getting trader by fd");
+          exit(EXIT_FAILURE);
+        }
+        printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX, traders[trader_index].trader_id);
+        close(ev[i].data.fd);
+        unlink(traders[trader_index].trader_fifo);
+      }
+    }
+    // wait for all child processes to exit
+    int status;
+    pid_t wpid;
+    int all_children_exited = 1;
+    while ((wpid = waitpid(-1, &status, WNOHANG)) > 0) {
+      if (!WIFEXITED(status)) {
+        all_children_exited = 0;
+      }
+    }
+    if (all_children_exited) {
+      break;
     }
   }
   printf("%s Trading completed\n", LOG_EXCHANGE_PREFIX);
