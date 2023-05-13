@@ -25,6 +25,7 @@ void load_products(const char* filename) {
   char all_products[PRODUCT_NAME_LENGTH * MAX_PRODUCTS];
   for (int i = 0; i < num_products; i++) {
     strcat(all_products, products[i].name);
+    strcat(all_products, " ");
   }
   printf("%s Trading %d products: %s\n", LOG_EXCHANGE_PREFIX, num_products, all_products);
 }
