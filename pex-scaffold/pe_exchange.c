@@ -173,10 +173,10 @@ int get_trader_by_pid(int pid) {
 }
 
 void print_report(Report* report) {
-  printf("%s \tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
+  printf("%s\tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
          report->product.name, report->buy_level, report->sell_level);
   for (int i = 0; i < report->num_product; i++) {
-    printf("%s \t\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
+    printf("%s\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
            report->orderBrief[i].type == BUY ? "Buy" : "Sell", report->orderBrief[i].quantity,
            report->orderBrief[i].price, report->orderBrief[i].num_order);
   }
@@ -184,7 +184,7 @@ void print_report(Report* report) {
 }
 
 void print_orderbook() {
-  printf("%s \t--ORDERBOOK--\n", LOG_EXCHANGE_PREFIX);
+  printf("%s\t--ORDERBOOK--\n", LOG_EXCHANGE_PREFIX);
   for (int i = 0; i < num_products; i++) {
     Report* report = (Report*)malloc(sizeof(Report));
     int current_buy_price = -1;
@@ -262,15 +262,15 @@ void print_orderbook() {
 void print_position() {
   // print postions of each trader
   for (int i = 0; i < num_traders; i++) {
-    printf("%s \t--POSITIONS--\n", LOG_EXCHANGE_PREFIX);
+    printf("%s\t--POSITIONS--\n", LOG_EXCHANGE_PREFIX);
     char buf[MAX_LOG_LENGTH];
     memset(buf, '\0', sizeof(buf));
-    sprintf(buf, "Trader %d:\n", i);
+    sprintf(buf, "Trader %d: ", i);
     for (int j = 0; j < num_products; j++) {
       char temp[MAX_LOG_LENGTH];
       memset(temp, '\0', sizeof(temp));
-      if (j != num_products) {
-        sprintf(temp, "%s %d ($%d),", products[j].name, traders[i].positions[j].quantity,
+      if (j != num_products - 1) {
+        sprintf(temp, "%s %d ($%d), ", products[j].name, traders[i].positions[j].quantity,
                 traders[i].positions[j].price);
       } else {
         sprintf(temp, "%s %d ($%d)", products[j].name, traders[i].positions[j].quantity,
@@ -278,7 +278,7 @@ void print_position() {
       }
       strcat(buf, temp);
     }
-    printf("%s \t%s\n", LOG_EXCHANGE_PREFIX, buf);
+    printf("%s\t%s\n", LOG_EXCHANGE_PREFIX, buf);
   }
 }
 
