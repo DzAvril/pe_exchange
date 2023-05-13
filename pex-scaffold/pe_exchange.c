@@ -820,17 +820,17 @@ int main(int argc, char** argv) {
       exit(EXIT_FAILURE);
     }
   }
-
+  int all_fifo_closed = 0;
   // listen event of traders close fifo
   while (1) {
     // block signal
-    sigset_t block_mask;
-    sigfillset(&block_mask);
-    sigdelset(&block_mask, SIGUSR1);
-    if (sigprocmask(SIG_BLOCK, &block_mask, NULL) == -1) {
-      perror("sigprocmask failed");
-      exit(EXIT_FAILURE);
-    }
+    // sigset_t block_mask;
+    // sigemptyset(&block_mask);
+    // sigaddset(&block_mask, SIGINT);
+    // if (sigprocmask(SIG_BLOCK, &block_mask, NULL) == -1) {
+    //   perror("sigprocmask failed");
+    //   exit(EXIT_FAILURE);
+    // }
     int nfds;
     if ((nfds = epoll_wait(epollfd, ev, num_traders, -1)) != -1) {
       for (int i = 0; i < nfds; i++) {
@@ -844,14 +844,22 @@ int main(int argc, char** argv) {
                  traders[trader_index].trader_id);
           close(ev[i].data.fd);
           unlink(traders[trader_index].trader_fifo);
+          // check all fifo closed
+          all_fifo_closed = 1;
+          for (int j = 0; j < num_traders; j++) {
+            if (open(traders[j].trader_fifo, O_RDONLY) != -1) {
+              all_fifo_closed = 0;
+              break;
+            }
+          }
         }
       }
     }
     // unblock signal
-    if (sigprocmask(SIG_UNBLOCK, &block_mask, NULL) == -1) {
-      perror("sigprocmask failed");
-      exit(EXIT_FAILURE);
-    }
+    // if (sigprocmask(SIG_UNBLOCK, &block_mask, NULL) == -1) {
+    //   perror("sigprocmask failed");
+    //   exit(EXIT_FAILURE);
+    // }
     // wait for all child processes to exit
     int status;
     pid_t wpid;
@@ -861,7 +869,7 @@ int main(int argc, char** argv) {
         all_children_exited = 0;
       }
     }
-    if (all_children_exited) {
+    if (all_children_exited && all_fifo_closed) {
       break;
     }
   }
