@@ -1,5 +1,6 @@
 #include "pe_trader.h"
-
+#define MAX_LINES 1000    // 数组的最大长度
+#define MAX_LINE_LEN 256  // 每行最大长度
 // global variables
 int trader_id;
 int exchange_fd;
@@ -98,7 +99,7 @@ void handle_exchange_reponse(Response* response) {
   serialize_order(order, buf);
   send_message_to_exchange(buf);
   free(order);
-  teardown();
+  // teardown();
 }
 
 void sig_handler(int signum) {
@@ -108,13 +109,13 @@ void sig_handler(int signum) {
     size_t len = read(exchange_fd, buf, sizeof(buf));
     printf("[%s %d] [t=%d]Received from PEX: %.*s\n", LOG_TRADER_PREFIX, trader_id, timestamp,
            (int)len, buf);
-    if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
-        (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
-      Response* response = (Response*)malloc(sizeof(Response));
-      deserialize_response(buf, response);
-      handle_exchange_reponse(response);
-      free(response);
-    }
+    // if ((strncmp(buf, RESPONSE_PREFIX, strlen(RESPONSE_PREFIX)) == 0) &&
+    //     (strncmp(buf, MESSAGE_MARKET_OPEN, strlen(MESSAGE_MARKET_OPEN)) != 0)) {
+    //   Response* response = (Response*)malloc(sizeof(Response));
+    //   deserialize_response(buf, response);
+    //   handle_exchange_reponse(response);
+    //   free(response);
+    // }
   }
 }
 
@@ -126,6 +127,24 @@ int main(int argc, char** argv) {
   if (argc > 1) {
     trader_id = atoi(argv[1]);
   }
+  char input_file[100];
+  char lines[MAX_LINES][MAX_LINE_LEN];
+  int line_num = 0;
+  sprintf(input_file, "trader_%d.txt", trader_id);
+  printf("[debug] %s:%d input_file: %s.\n", __FILE__, __LINE__, input_file);
+  // check if trader.txt exists
+  if (access(input_file, F_OK) != -1) {
+    FILE* fp = fopen(input_file, "r");
+    if (!fp) {
+      perror("Failed to open file");
+      exit(EXIT_FAILURE);
+    }
+    // 读取文件，保存到数组中
+    while (line_num < MAX_LINES && fgets(lines[line_num], MAX_LINE_LEN, fp)) {
+      line_num++;
+    }
+  }
+  printf("[debug] %s:%d line_num: %d.\n", __FILE__, __LINE__, line_num);
 
   // register signal handler
   // signal(SIGUSR1, sig_handler);
@@ -146,11 +165,23 @@ int main(int argc, char** argv) {
   char trader_fifo[MAX_FIFO_NAME_LENGTH];
   sprintf(trader_fifo, FIFO_TRADER, trader_id);
   trader_fd = open(trader_fifo, O_WRONLY);
+
+  // send test data to exchange
+  if (trader_id == 1) {
+    sleep(10);
+  }
+  for (int i = 0; i < line_num; i++) {
+    char buf[MAX_MESSAGE_LENGTH];
+    memset(buf, '\0', sizeof(buf));
+    strcpy(buf, lines[i]);
+    send_message_to_exchange(buf);
+    sleep(1);
+  }
   // event loop:
   while (1) {
     pause();
   }
-  // sleep(2);
+  sleep(2);
   teardown();
   return 0;
 }
