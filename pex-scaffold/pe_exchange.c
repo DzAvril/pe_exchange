@@ -205,7 +205,7 @@ void print_report(Report* report) {
              report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
              report->orderBrief[i].price, report->orderBrief[i].num_order);
     } else {
-      printf("%s\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
+      printf("%s\t\t%s %d @ $%d (%d order)\n", LOG_EXCHANGE_PREFIX,
              report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
              report->orderBrief[i].price, report->orderBrief[i].num_order);
     }
@@ -432,7 +432,7 @@ void match_orders(Order* order) {
               traders[seller_trader_index].cash_balance +=
                   orderInfo[i].price * orderInfo[i].quantity;
               // charge 1% transaction fee to the trader who placed the order last
-              int fee = (int)ceil(orderInfo[i].price * orderInfo[i].quantity * 0.01);
+              int fee = (int)round(orderInfo[i].price * orderInfo[i].quantity * FEE_PERCENTAGE);
               exchange_fee_collected += fee;
 
               // update cache balance of buyer
@@ -449,8 +449,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[seller_trader_index].positions[j].product.name) == 0) {
                   traders[seller_trader_index].positions[j].quantity -= orderInfo[i].quantity;
-                  traders[seller_trader_index].positions[j].price =
-                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[seller_trader_index].positions[j].price +=
+                      orderInfo[i].price * orderInfo[i].quantity;
                   break;
                 }
               }
@@ -459,17 +459,21 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[buyer_trader_index].positions[j].product.name) == 0) {
                   traders[buyer_trader_index].positions[j].quantity += orderInfo[i].quantity;
-                  traders[buyer_trader_index].positions[j].price =
-                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[buyer_trader_index].positions[j].price -=
+                      (orderInfo[i].price * orderInfo[i].quantity + fee);
                   break;
                 }
               }
+              send_filled(orderbook[orderInfo[i].index].trader_id,
+                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+
+              printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                     LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                     orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                     orderInfo[i].price * orderInfo[i].quantity, fee);
               if (quantity_left == 0) {
-                printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
-                       LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
-                       orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
-                       orderInfo[i].price * orderInfo[i].quantity, fee);
-                send_filled(order->trader_id, order->order_id, order->quantity);
+                send_filled(orderbook[orderInfo[i].index].trader_id,
+                            orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
                 break;
               }
               order->quantity = quantity_left;
@@ -481,7 +485,7 @@ void match_orders(Order* order) {
               int seller_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
               traders[seller_trader_index].cash_balance += orderInfo[i].price * order->quantity;
               // charge 1% transaction fee to the trader who placed the order last
-              int fee = (int)ceil(orderInfo[i].price * order->quantity * 0.01);
+              int fee = (int)round(orderInfo[i].price * order->quantity * FEE_PERCENTAGE);
               exchange_fee_collected += fee;
               // update cash balance of buyer
               int buyer_trader_index = get_trader_by_id(order->trader_id);
@@ -496,8 +500,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[seller_trader_index].positions[j].product.name) == 0) {
                   traders[seller_trader_index].positions[j].quantity -= order->quantity;
-                  traders[seller_trader_index].positions[j].price =
-                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[seller_trader_index].positions[j].price +=
+                      orderInfo[i].price * order->quantity;
                   break;
                 }
               }
@@ -506,8 +510,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[buyer_trader_index].positions[j].product.name) == 0) {
                   traders[buyer_trader_index].positions[j].quantity += order->quantity;
-                  traders[buyer_trader_index].positions[j].price =
-                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[buyer_trader_index].positions[j].price -=
+                      (orderInfo[i].price * order->quantity + fee);
                   break;
                 }
               }
@@ -515,7 +519,9 @@ void match_orders(Order* order) {
                      LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
                      orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
                      orderInfo[i].price * order->quantity, fee);
-              send_filled(order->trader_id, order->order_id, order->quantity);
+              send_filled(orderbook[orderInfo[i].index].trader_id,
+                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+              order->quantity = 0;
               break;
             }
           }
@@ -566,7 +572,7 @@ void match_orders(Order* order) {
           // sort orderInfo by price
           for (int i = 0; i < num_orderInfo - 1; i++) {
             for (int j = 0; j < num_orderInfo - i - 1; j++) {
-              if (orderInfo[j].price > orderInfo[j + 1].price) {
+              if (orderInfo[j].price < orderInfo[j + 1].price) {
                 OrderInfo temp = orderInfo[j];
                 orderInfo[j] = orderInfo[j + 1];
                 orderInfo[j + 1] = temp;
@@ -576,6 +582,8 @@ void match_orders(Order* order) {
           // match orders
           for (int i = 0; i < num_orderInfo; i++) {
             int quantity_left = order->quantity - orderInfo[i].quantity;
+            printf("[debug] %s:%d order->quanity: %d, orderInfo[i].quantity: %d.\n", __FILE__,
+                   __LINE__, order->quantity, orderInfo[i].quantity);
             if (quantity_left >= 0) {
               // remove order from orderbook
               orderInfo[i].to_be_removed = 1;
@@ -584,7 +592,7 @@ void match_orders(Order* order) {
               traders[seller_trader_index].cash_balance +=
                   orderInfo[i].price * orderInfo[i].quantity;
               // charge 1% transaction fee to the trader who placed the order last
-              int fee = (int)ceil(orderInfo[i].price * orderInfo[i].quantity * 0.01);
+              int fee = (int)round(orderInfo[i].price * orderInfo[i].quantity * FEE_PERCENTAGE);
               exchange_fee_collected += fee;
               // update cash balance of buyer
               int buyer_trader_index = get_trader_by_id(orderbook[orderInfo[i].index].trader_id);
@@ -600,8 +608,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[seller_trader_index].positions[j].product.name) == 0) {
                   traders[seller_trader_index].positions[j].quantity -= orderInfo[i].quantity;
-                  traders[seller_trader_index].positions[j].price =
-                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[seller_trader_index].positions[j].price +=
+                      (orderInfo[i].price * orderInfo[i].quantity - fee);
                   break;
                 }
               }
@@ -610,17 +618,21 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[buyer_trader_index].positions[j].product.name) == 0) {
                   traders[buyer_trader_index].positions[j].quantity += orderInfo[i].quantity;
-                  traders[buyer_trader_index].positions[j].price =
-                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[buyer_trader_index].positions[j].price -=
+                      orderInfo[i].price * orderInfo[i].quantity;
                   break;
                 }
               }
+              send_filled(orderbook[orderInfo[i].index].trader_id,
+                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+
+              printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                     LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                     orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                     orderInfo[i].price * orderInfo[i].quantity, fee);
               if (quantity_left == 0) {
-                printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
-                       LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
-                       orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
-                       orderInfo[i].price * orderInfo[i].quantity, fee);
-                send_filled(order->trader_id, order->order_id, order->quantity);
+                send_filled(orderbook[orderInfo[i].index].trader_id,
+                            orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
                 break;
               }
               order->quantity = quantity_left;
@@ -629,7 +641,7 @@ void match_orders(Order* order) {
               orderInfo[i].to_be_removed = 0;
               orderbook[orderInfo[i].index].quantity -= order->quantity;
               // charge 1% transaction fee to the trader who placed the order last
-              int fee = (int)ceil(orderInfo[i].price * order->quantity * 0.01);
+              int fee = (int)round(orderInfo[i].price * order->quantity * FEE_PERCENTAGE);
               // update cash balance of seller
               int seller_trader_index = get_trader_by_id(order->trader_id);
               traders[seller_trader_index].cash_balance += orderInfo[i].price * order->quantity;
@@ -647,8 +659,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[seller_trader_index].positions[j].product.name) == 0) {
                   traders[seller_trader_index].positions[j].quantity -= order->quantity;
-                  traders[seller_trader_index].positions[j].price =
-                      traders[seller_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[seller_trader_index].positions[j].price +=
+                      (orderInfo[i].price * order->quantity - fee);
                   break;
                 }
               }
@@ -657,8 +669,8 @@ void match_orders(Order* order) {
                 if (strcmp(order->product.name,
                            traders[buyer_trader_index].positions[j].product.name) == 0) {
                   traders[buyer_trader_index].positions[j].quantity += order->quantity;
-                  traders[buyer_trader_index].positions[j].price =
-                      traders[buyer_trader_index].positions[j].quantity * orderInfo[i].price;
+                  traders[buyer_trader_index].positions[j].price -=
+                      orderInfo[i].price * order->quantity;
                   break;
                 }
               }
@@ -666,7 +678,9 @@ void match_orders(Order* order) {
                      LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
                      orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
                      orderInfo[i].price * order->quantity, fee);
-              send_filled(order->trader_id, order->order_id, order->quantity);
+              send_filled(orderbook[orderInfo[i].index].trader_id,
+                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+              order->quantity = 0;
               break;
             }
           }
@@ -690,6 +704,7 @@ void match_orders(Order* order) {
             }
           }
           // check if order quantity is left
+          printf("[debug] %s:%d order->quantity left: %d.\n", __FILE__, __LINE__, order->quantity);
           if (order->quantity > 0) {
             orderbook[num_orders] = *order;
             num_orders++;

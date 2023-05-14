@@ -15,7 +15,7 @@
 
 #define FIFO_EXCHANGE "/tmp/pe_exchange_%d"
 #define FIFO_TRADER "/tmp/pe_trader_%d"
-#define FEE_PERCENTAGE 1
+#define FEE_PERCENTAGE 0.01
 #define LOG_EXCHANGE_PREFIX "[PEX]"
 #define LOG_TRADER_PREFIX "Trader"
 
@@ -38,7 +38,7 @@
 
 #define MESSAGE_MARKET_OPEN "MARKET OPEN;"
 #define MESSAGE_ACCEPTED "ACCEPTED"
-#define MESSAGE_FILLED "FILLED"
+#define MESSAGE_FILLED "FILL"
 #define RESPONSE_PREFIX "MARKET"
 #define RESPONSE_LETTERS_NUM 100
 #define ORDER_LETTERS_NUM 100
