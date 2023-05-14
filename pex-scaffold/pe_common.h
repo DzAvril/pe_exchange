@@ -76,6 +76,7 @@ typedef struct {
   int exchange_fd;
   int trader_fd;
   Position positions[MAX_PRODUCTS];
+  int disconnected;
 } Trader;
 
 typedef struct {
