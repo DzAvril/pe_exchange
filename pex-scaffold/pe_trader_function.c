@@ -13,7 +13,6 @@ void teardown_trader() {
   close(trader_fd);
   unlink(exchange_fifo);
   unlink(trader_fifo);
-  exit(EXIT_SUCCESS);
 }
 
 void deserialize_response(char* buf, Response* response) {

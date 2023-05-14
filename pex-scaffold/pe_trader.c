@@ -22,7 +22,6 @@ void sig_handler(int signum) {
       deserialize_response(buf, response);
       handle_exchange_reponse(response);
       free(response);
-      teardown_trader();
     }
   }
 }
