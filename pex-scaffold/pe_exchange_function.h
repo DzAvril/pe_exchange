@@ -1,3 +1,6 @@
+#ifndef PE_EXCHANGE_FUNCTION_H
+#define PE_EXCHANGE_FUNCTION_H
+
 #include <math.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -53,3 +56,4 @@ void parsing_command(char* buf, int trader_id);
 void connect_to_pipes();
 void notify_market_open();
 void cleanup_trader(int trader_index);
+#endif  // PE_EXCHANGE_FUNCTION_H
