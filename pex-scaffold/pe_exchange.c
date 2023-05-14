@@ -371,6 +371,13 @@ void send_filled(int trader_id, int order_id, int quantity) {
   send_message(trader_id, buf);
 }
 
+void send_invalid(int trader_id, int order_id) {
+  char buf[MAX_MESSAGE_LENGTH];
+  memset(buf, '\0', sizeof(buf));
+  sprintf(buf, "%s %d;", MESSAGE_INVALID, order_id);
+  send_message(trader_id, buf);
+}
+
 void match_orders(Order* order) {
   if (num_orders == 0) {
     orderbook[num_orders] = *order;
@@ -730,7 +737,11 @@ void handle_order(char* buf, int trader_id) {
   market_message(trader_id, order);
   // match orders
   if (order->type == BUY || order->type == SELL) {
-    match_orders(order);
+    if (order->quantity == 0) {
+      send_invalid(trader_id, order->order_id);
+    } else {
+      match_orders(order);
+    }
   }
   // release order
   free(order);
