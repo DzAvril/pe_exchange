@@ -6,7 +6,7 @@ LDFLAGS = -lm
 COMPILE = $(CC) $(CFLAGS) -c $< -o $@
 LINK = $(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-all: pe_exchange pe_trader test
+all: pe_exchange pe_trader
 
 pe_exchange: pe_exchange.o pe_exchange_function.o
 	$(LINK)
