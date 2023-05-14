@@ -200,9 +200,15 @@ void print_report(Report* report) {
   printf("%s\tProduct: %s; Buy levels: %d; Sell levels: %d\n", LOG_EXCHANGE_PREFIX,
          report->product.name, report->buy_level, report->sell_level);
   for (int i = 0; i < report->num_product; i++) {
-    printf("%s\t\t%s %d @ $%d (%d order)\n", LOG_EXCHANGE_PREFIX,
-           report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
-           report->orderBrief[i].price, report->orderBrief[i].num_order);
+    if (report->orderBrief[i].num_order > 1) {
+      printf("%s\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
+             report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
+             report->orderBrief[i].price, report->orderBrief[i].num_order);
+    } else {
+      printf("%s\t\t%s %d @ $%d (%d orders)\n", LOG_EXCHANGE_PREFIX,
+             report->orderBrief[i].type == BUY ? "BUY" : "SELL", report->orderBrief[i].quantity,
+             report->orderBrief[i].price, report->orderBrief[i].num_order);
+    }
   }
   return;
 }
@@ -289,8 +295,8 @@ void print_orderbook() {
 
 void print_position() {
   // print postions of each trader
+  printf("%s\t--POSITIONS--\n", LOG_EXCHANGE_PREFIX);
   for (int i = 0; i < num_traders; i++) {
-    printf("%s\t--POSITIONS--\n", LOG_EXCHANGE_PREFIX);
     char buf[MAX_LOG_LENGTH];
     memset(buf, '\0', sizeof(buf));
     sprintf(buf, "Trader %d: ", i);
@@ -459,6 +465,10 @@ void match_orders(Order* order) {
                 }
               }
               if (quantity_left == 0) {
+                printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                       LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                       orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                       orderInfo[i].price * orderInfo[i].quantity, fee);
                 send_filled(order->trader_id, order->order_id, order->quantity);
                 break;
               }
@@ -501,6 +511,10 @@ void match_orders(Order* order) {
                   break;
                 }
               }
+              printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                     LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                     orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                     orderInfo[i].price * order->quantity, fee);
               send_filled(order->trader_id, order->order_id, order->quantity);
               break;
             }
@@ -602,6 +616,10 @@ void match_orders(Order* order) {
                 }
               }
               if (quantity_left == 0) {
+                printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                       LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                       orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                       orderInfo[i].price * orderInfo[i].quantity, fee);
                 send_filled(order->trader_id, order->order_id, order->quantity);
                 break;
               }
@@ -644,6 +662,10 @@ void match_orders(Order* order) {
                   break;
                 }
               }
+              printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
+                     LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
+                     orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
+                     orderInfo[i].price * order->quantity, fee);
               send_filled(order->trader_id, order->order_id, order->quantity);
               break;
             }
