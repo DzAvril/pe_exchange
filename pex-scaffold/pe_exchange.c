@@ -93,7 +93,7 @@ void fork_child_process() {
       // parent process
       traders[i].trader_id = i;
       traders[i].pid = pid;
-
+      traders[i].disconnected = 0;
       traders[i].exchange_fd = open(traders[i].exchange_fifo, O_WRONLY);
       if (traders[i].exchange_fd == -1) {
         perror("Failed to open FIFO");
@@ -126,6 +126,9 @@ void teardown() {
 }
 
 void send_message(int trader_id, const char* message) {
+  if (traders[trader_id].disconnected) {
+    return;
+  }
   size_t message_len = strlen(message);
   if (write(traders[trader_id].exchange_fd, message, message_len) != message_len) {
     perror("Error writing message to trader");
@@ -847,15 +850,7 @@ void cleanup_trader(int trader_index) {
   close(traders[trader_index].exchange_fd);
   unlink(traders[trader_index].trader_fifo);
   unlink(traders[trader_index].exchange_fifo);
-  // delete order of this trader from orderbook
-  for (int i = 0; i < num_orders; i++) {
-    if (orderbook[i].trader_id == traders[trader_index].trader_id) {
-      for (int j = i; j < num_orders - 1; j++) {
-        orderbook[j] = orderbook[j + 1];
-      }
-      num_orders--;
-    }
-  }
+  traders[trader_index].disconnected = 1;
   for (int i = trader_index; i < num_traders - 1; i++) {
     traders[i] = traders[i + 1];
   }
