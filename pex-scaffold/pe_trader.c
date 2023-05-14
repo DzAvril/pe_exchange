@@ -2,12 +2,12 @@
 #include "pe_trader.h"
 
 // global variables
-int trader_id;
-int exchange_fd;
-int trader_fd;
-int order_id = 0;
-char exchange_fifo[MAX_FIFO_NAME_LENGTH];
-char trader_fifo[MAX_FIFO_NAME_LENGTH];
+extern int trader_id;
+extern int exchange_fd;
+extern int trader_fd;
+extern int order_id;
+extern char exchange_fifo[MAX_FIFO_NAME_LENGTH];
+extern char trader_fifo[MAX_FIFO_NAME_LENGTH];
 
 void sig_handler(int signum) {
   if (signum == SIGUSR1) {
