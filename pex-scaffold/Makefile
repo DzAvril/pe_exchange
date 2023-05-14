@@ -6,7 +6,7 @@ LDFLAGS = -lm
 COMPILE = $(CC) $(CFLAGS) -c $< -o $@
 LINK = $(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-all: pe_exchange pe_trader
+all: pe_exchange pe_trader test
 
 pe_exchange: pe_exchange.o pe_exchange_function.o
 	$(LINK)
@@ -25,6 +25,16 @@ pe_trader.o: pe_trader.c pe_trader.h pe_trader_function.h
 
 pe_trader_function.o: pe_trader_function.c pe_trader_function.h pe_common.h
 	$(COMPILE)
+
+test: test.o pe_exchange_function.o pe_trader_function.o
+	$(LINK) -lcmocka
+
+test.o: ./tests/unit-tests.c pe_exchange_function.h pe_trader_function.h ./tests/cmocka.h
+	$(COMPILE)
+
+PHONY: run_test
+run_test: test
+	./test
 
 clean:
 	rm -f *.o pe_exchange pe_trader
