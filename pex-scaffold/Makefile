@@ -17,10 +17,13 @@ pe_exchange.o: pe_exchange.c pe_exchange.h pe_exchange_function.h
 pe_exchange_function.o: pe_exchange_function.c pe_exchange_function.h pe_common.h
 	$(COMPILE)
 
-pe_trader: pe_trader.o
+pe_trader: pe_trader.o pe_trader_function.o
 	$(LINK)
 
-pe_trader.o: pe_trader.c pe_trader.h pe_common.h
+pe_trader.o: pe_trader.c pe_trader.h pe_trader_function.h
+	$(COMPILE)
+
+pe_trader_function.o: pe_trader_function.c pe_trader_function.h pe_common.h
 	$(COMPILE)
 
 clean:
