@@ -851,10 +851,6 @@ void cleanup_trader(int trader_index) {
   unlink(traders[trader_index].trader_fifo);
   unlink(traders[trader_index].exchange_fifo);
   traders[trader_index].disconnected = 1;
-  for (int i = trader_index; i < num_traders - 1; i++) {
-    traders[i] = traders[i + 1];
-  }
-  num_traders--;
 }
 
 int main(int argc, char** argv) {
