@@ -722,6 +722,26 @@ void match_orders(Order* order) {
     }
   }
 }
+
+int validate_order(Order* order) {
+  // check if product exists
+  int product_exists = 0;
+  for (int i = 0; i < num_products; i++) {
+    if (strcmp(order->product.name, products[i].name) == 0) {
+      product_exists = 1;
+      break;
+    }
+  }
+  if (!product_exists) {
+    return -1;
+  }
+  // check if quanity is positive
+  if (order->quantity <= 0) {
+    return -1;
+  }
+  return 0;
+}
+
 void handle_order(char* buf, int trader_id) {
   Order* order = (Order*)malloc(sizeof(Order));
   deserialize_order(order, buf);
@@ -737,7 +757,8 @@ void handle_order(char* buf, int trader_id) {
   market_message(trader_id, order);
   // match orders
   if (order->type == BUY || order->type == SELL) {
-    if (order->quantity == 0) {
+    // ivalid order handler
+    if (validate_order(order) == -1) {
       send_invalid(trader_id, order->order_id);
     } else {
       match_orders(order);
