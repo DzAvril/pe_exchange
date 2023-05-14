@@ -2,7 +2,7 @@
 #define PE_TRADER_FUNCTION_H
 #include "pe_common.h"
 
-void teardown();
+void teardown_trader();
 void deserialize_response(char* buf, Response* response);
 void serialize_order(Order* order, char* buf);
 void send_message_to_exchange(char* buf);

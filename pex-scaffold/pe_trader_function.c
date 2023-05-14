@@ -1,14 +1,14 @@
 #include "pe_trader_function.h"
 
 // global variables
-extern int trader_id;
-extern int exchange_fd;
-extern int trader_fd;
-extern int order_id;
-extern char exchange_fifo[MAX_FIFO_NAME_LENGTH];
-extern char trader_fifo[MAX_FIFO_NAME_LENGTH];
+int trader_id;
+int exchange_fd;
+int trader_fd;
+int order_id;
+char exchange_fifo[MAX_FIFO_NAME_LENGTH];
+char trader_fifo[MAX_FIFO_NAME_LENGTH];
 
-void teardown() {
+void teardown_trader() {
   close(exchange_fd);
   close(trader_fd);
   unlink(exchange_fifo);
@@ -104,5 +104,4 @@ void handle_exchange_reponse(Response* response) {
   serialize_order(order, buf);
   send_message_to_exchange(buf);
   free(order);
-  // teardown();
 }
