@@ -7,6 +7,7 @@ int trader_fd;
 int order_id;
 char exchange_fifo[MAX_FIFO_NAME_LENGTH];
 char trader_fifo[MAX_FIFO_NAME_LENGTH];
+int timestamp;
 
 void teardown_trader() {
   close(exchange_fd);

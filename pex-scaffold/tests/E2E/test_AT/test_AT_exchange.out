@@ -1,0 +1,12 @@
+[PEX] Received message from exchange: MARKET OPEN;.
+[PEX] Received message from exchange: MARKET SELL GPU 356 318;.
+[PEX] Starting
+[PEX] Trading 4 products: GPU CPU Memory switch
+[PEX] Created FIFO /tmp/pe_exchange_0
+[PEX] Created FIFO /tmp/pe_trader_0
+[PEX] Connected to /tmp/pe_exchange_0
+[PEX] Connected to /tmp/pe_trader_0
+[PEX] Received message from trader: BUY 0 GPU 356 318;.
+[PEX] Trader 0 disconnected
+[PEX] Trading completed
+[PEX] Exchange fees collected: $0

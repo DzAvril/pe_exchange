@@ -1,0 +1,86 @@
+[PEX] Starting
+[PEX] Trading 2 products: GPU Router
+[PEX] Created FIFO /tmp/pe_exchange_0
+[PEX] Created FIFO /tmp/pe_trader_0
+[PEX] Starting trader 0 (./test_buy_sell_trader)
+[PEX] Connected to /tmp/pe_exchange_0
+[PEX] Connected to /tmp/pe_trader_0
+[PEX] [T0] Parsing command: <BUY 0 GPU 30 500>
+[Trader 0] [t=0]Received from PEX: ACCEPTED 0;
+[PEX]   --ORDERBOOK--
+[PEX]   Product: GPU; Buy levels: 1; Sell levels: 0
+[PEX]           BUY 30 @ $500 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 0 ($0), Router 0 ($0)
+[PEX]   Trader 1: GPU 0 ($0), Router 0 ($0)
+[PEX] [T0] Parsing command: <BUY 1 GPU 30 501>
+[PEX]   --ORDERBOOK--
+[Trader 0] [t=0]Received from PEX: ACCEPTED 1;
+[PEX]   Product: GPU; Buy levels: 2; Sell levels: 0
+[PEX]           BUY 30 @ $501 (1 order)
+[PEX]           BUY 30 @ $500 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 0 ($0), Router 0 ($0)
+[PEX]   Trader 1: GPU 0 ($0), Router 0 ($0)
+[PEX] [T0] Parsing command: <BUY 2 GPU 30 501>
+[PEX]   --ORDERBOOK--
+[Trader 0] [t=0]Received from PEX: ACCEPTED 2;
+[PEX]   Product: GPU; Buy levels: 2; Sell levels: 0
+[PEX]           BUY 60 @ $501 (2 orders)
+[PEX]           BUY 30 @ $500 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 0 ($0), Router 0 ($0)
+[PEX]   Trader 1: GPU 0 ($0), Router 0 ($0)
+[PEX] [T0] Parsing command: <BUY 3 GPU 30 502>
+[PEX]   --ORDERBOOK--
+[Trader 0] [t=0]Received from PEX: ACCEPTED 3;
+[PEX]   Product: GPU; Buy levels: 3; Sell levels: 0
+[PEX]           BUY 30 @ $502 (1 order)
+[PEX]           BUY 60 @ $501 (2 orders)
+[PEX]           BUY 30 @ $500 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 0 ($0), Router 0 ($0)
+[PEX]   Trader 1: GPU 0 ($0), Router 0 ($0)
+[PEX] Created FIFO /tmp/pe_exchange_1
+[PEX] Created FIFO /tmp/pe_trader_1
+[PEX] Starting trader 1 (./test_buy_sell_trader)
+[PEX] Connected to /tmp/pe_exchange_1
+[PEX] Connected to /tmp/pe_trader_1
+[PEX] [T1] Parsing command: <SELL 0 GPU 99 501>
+[Trader 0] [t=0]Received from PEX: MARKET OPEN;
+[Trader 0] [t=0]Received from PEX: MARKET SELL GPU 99 501;
+[Trader 1] [t=0]Received from PEX: ACCEPTED 0;
+[Trader 0] [t=0]Received from PEX: FILL 3 30;
+[PEX] Match: Order 3 [T0], New Order 0 [T1], value: $15060, fee: $151.
+[Trader 1] [t=0]Received from PEX: FILL 0 30;
+[Trader 0] [t=0]Received from PEX: FILL 1 30;
+[PEX] Match: Order 1 [T0], New Order 0 [T1], value: $15030, fee: $150.
+[Trader 1] [t=0]Received from PEX: FILL 0 30;
+[Trader 0] [t=0]Received from PEX: FILL 2 30;
+[PEX] Match: Order 2 [T0], New Order 0 [T1], value: $15030, fee: $150.
+[Trader 1] [t=0]Received from PEX: FILL 0 30;
+[PEX]   --ORDERBOOK--
+[PEX]   Product: GPU; Buy levels: 1; Sell levels: 1
+[PEX]           SELL 9 @ $501 (1 order)
+[PEX]           BUY 30 @ $500 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 90 ($-45120), Router 0 ($0)
+[PEX]   Trader 1: GPU -90 ($44669), Router 0 ($0)
+[PEX] [T1] Parsing command: <SELL 1 GPU 99 402>
+[Trader 0] [t=0]Received from PEX: MARKET SELL GPU 99 402;FILL 0 30;
+[Trader 1] [t=0]Received from PEX: ACCEPTED 1;
+[PEX] Match: Order 0 [T0], New Order 1 [T1], value: $15000, fee: $150.
+[PEX]   --ORDERBOOK--
+[Trader 1] [t=0]Received from PEX: FILL 1 30;
+[PEX]   Product: GPU; Buy levels: 0; Sell levels: 2
+[PEX]           SELL 9 @ $501 (1 order)
+[PEX]           SELL 69 @ $402 (1 order)
+[PEX]   Product: Router; Buy levels: 0; Sell levels: 0
+[PEX]   --POSITIONS--
+[PEX]   Trader 0: GPU 120 ($-60120), Router 0 ($0)
+[PEX]   Trader 1: GPU -120 ($59519), Router 0 ($0)

@@ -119,6 +119,11 @@ void sig_handler(int sig, siginfo_t* info, void* context) {
     memset(expected_buf, '\0', sizeof(expected_buf));
     sprintf(expected_buf, "SELL 0 AAPL 100 200;");
     assert_string_equal(buf, expected_buf);
+    // kill trader
+    if (kill(traders[trader_index].pid, SIGKILL) == -1) {
+      perror("Error killing trader");
+      exit(EXIT_FAILURE);
+    }
   }
 }
 
