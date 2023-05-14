@@ -842,6 +842,26 @@ void notify_market_open() {
   }
 }
 
+void cleanup_trader(int trader_index) {
+  close(traders[trader_index].trader_fd);
+  close(traders[trader_index].exchange_fd);
+  unlink(traders[trader_index].trader_fifo);
+  unlink(traders[trader_index].exchange_fifo);
+  // delete order of this trader from orderbook
+  for (int i = 0; i < num_orders; i++) {
+    if (orderbook[i].trader_id == traders[trader_index].trader_id) {
+      for (int j = i; j < num_orders - 1; j++) {
+        orderbook[j] = orderbook[j + 1];
+      }
+      num_orders--;
+    }
+  }
+  for (int i = trader_index; i < num_traders - 1; i++) {
+    traders[i] = traders[i + 1];
+  }
+  num_traders--;
+}
+
 int main(int argc, char** argv) {
   printf("%s Starting\n", LOG_EXCHANGE_PREFIX);
   if (argc > 1) {
@@ -912,8 +932,10 @@ int main(int argc, char** argv) {
           }
           printf("%s Trader %d disconnected\n", LOG_EXCHANGE_PREFIX,
                  traders[trader_index].trader_id);
-          close(ev[i].data.fd);
-          unlink(traders[trader_index].trader_fifo);
+
+          cleanup_trader(trader_index);
+          // close(ev[i].data.fd);
+          // unlink(traders[trader_index].trader_fifo);
           // check all fifo closed
           all_fifo_closed = 1;
           for (int j = 0; j < num_traders; j++) {
