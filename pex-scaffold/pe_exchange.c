@@ -34,9 +34,7 @@ void load_products(const char* filename) {
 }
 
 void parse_args(int argc, char** argv) {
-  // printf("[debug] %s-%d Parsing args...\n", __FILE__, __LINE__);
   const char* filename = argv[1];
-  // printf("[debug] %s-%d filename : %s.\n", __FILE__, __LINE__, filename);
   load_products(filename);
   num_traders = argc - 2;
   for (int i = 0; i < num_traders; i++) {
@@ -466,6 +464,7 @@ void match_orders(Order* order) {
               }
               send_filled(orderbook[orderInfo[i].index].trader_id,
                           orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+              send_filled(order->trader_id, order->order_id, orderInfo[i].quantity);
 
               printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
                      LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
@@ -474,6 +473,7 @@ void match_orders(Order* order) {
               if (quantity_left == 0) {
                 send_filled(orderbook[orderInfo[i].index].trader_id,
                             orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+                send_filled(order->trader_id, order->order_id, orderInfo[i].quantity);
                 break;
               }
               order->quantity = quantity_left;
@@ -520,7 +520,8 @@ void match_orders(Order* order) {
                      orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
                      orderInfo[i].price * order->quantity, fee);
               send_filled(orderbook[orderInfo[i].index].trader_id,
-                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+                          orderbook[orderInfo[i].index].order_id, order->quantity);
+              send_filled(order->trader_id, order->order_id, order->quantity);
               order->quantity = 0;
               break;
             }
@@ -582,8 +583,6 @@ void match_orders(Order* order) {
           // match orders
           for (int i = 0; i < num_orderInfo; i++) {
             int quantity_left = order->quantity - orderInfo[i].quantity;
-            printf("[debug] %s:%d order->quanity: %d, orderInfo[i].quantity: %d.\n", __FILE__,
-                   __LINE__, order->quantity, orderInfo[i].quantity);
             if (quantity_left >= 0) {
               // remove order from orderbook
               orderInfo[i].to_be_removed = 1;
@@ -625,6 +624,7 @@ void match_orders(Order* order) {
               }
               send_filled(orderbook[orderInfo[i].index].trader_id,
                           orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+              send_filled(order->trader_id, order->order_id, orderInfo[i].quantity);
 
               printf("%s Match: Order %d [T%d], New Order %d [T%d], value: $%d, fee: $%d.\n",
                      LOG_EXCHANGE_PREFIX, orderbook[orderInfo[i].index].order_id,
@@ -633,6 +633,7 @@ void match_orders(Order* order) {
               if (quantity_left == 0) {
                 send_filled(orderbook[orderInfo[i].index].trader_id,
                             orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+                send_filled(order->trader_id, order->order_id, orderInfo[i].quantity);
                 break;
               }
               order->quantity = quantity_left;
@@ -679,7 +680,8 @@ void match_orders(Order* order) {
                      orderbook[orderInfo[i].index].trader_id, order->order_id, order->trader_id,
                      orderInfo[i].price * order->quantity, fee);
               send_filled(orderbook[orderInfo[i].index].trader_id,
-                          orderbook[orderInfo[i].index].order_id, orderInfo[i].quantity);
+                          orderbook[orderInfo[i].index].order_id, order->quantity);
+              send_filled(order->trader_id, order->order_id, order->quantity);
               order->quantity = 0;
               break;
             }
@@ -704,7 +706,6 @@ void match_orders(Order* order) {
             }
           }
           // check if order quantity is left
-          printf("[debug] %s:%d order->quantity left: %d.\n", __FILE__, __LINE__, order->quantity);
           if (order->quantity > 0) {
             orderbook[num_orders] = *order;
             num_orders++;
